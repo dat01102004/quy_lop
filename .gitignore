@@ -1,0 +1,96 @@
+# -------- Flutter / Dart --------
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.melos_tool/
+coverage/
+.dart_tool/package_config.json
+
+# Khóa gói: với APP thì NÊN commit pubspec.lock; nếu là package, hãy bỏ dòng này đi
+# pubspec.lock
+
+# Build output của Flutter (mọi nền tảng)
+build/
+# Web build
+web/.dart_tool/
+# Generated l10n
+lib/l10n/**.arb.bak
+
+# -------- IDE / Editor --------
+# Android Studio / IntelliJ
+.idea/
+*.iml
+# VS Code
+.vscode/
+# OS files
+.DS_Store
+Thumbs.db
+
+# -------- Android --------
+android/.gradle/
+android/build/
+android/app/build/
+android/captures/
+android/local.properties             # chứa đường dẫn SDK local
+*.jks
+*.keystore
+key.properties
+keystore.properties
+# Debug keystore mặc định
+android/app/debug.keystore
+
+# Google services (tuỳ chọn – đọc ghi chú bên dưới)
+# android/app/google-services.json
+
+# Proguard / mapping (không cần lên Git)
+android/app/release/*
+android/app/release/*.apk
+android/app/release/*.aab
+android/app/release/output-metadata.json
+android/app/mapping.txt
+
+# -------- iOS / macOS --------
+ios/Pods/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/.symlinks/
+ios/Flutter/ephemeral/
+ios/Flutter/App.framework
+ios/Flutter/Generated.xcconfig
+macos/Flutter/ephemeral/
+macos/Pods/
+# Xcode
+ios/Runner.xcworkspace/
+*.xcworkspace
+*.xcuserstate
+*.xcuserdatad/
+*.xcsettings
+# Dấu vết build
+ios/DerivedData/
+macos/DerivedData/
+
+# Google services (tuỳ chọn – đọc ghi chú bên dưới)
+# ios/Runner/GoogleService-Info.plist
+
+# -------- Windows / Linux --------
+windows/ephemeral/
+windows/build/
+linux/ephemeral/
+linux/build/
+
+# -------- Fastlane / CI artifacts --------
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/test_output/
+screenshots/
+*.ipa
+*.dSYM.zip
+
+# -------- Env / Secrets --------
+.env
+.env.*
+*.secret
+*.credentials
+*.pem
+*.p12

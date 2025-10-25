@@ -1,0 +1,60 @@
+name: quylop
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.8.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  flutter_riverpod: ^3.0.0
+  dio: ^5.9.0
+  shared_preferences: ^2.5.3
+  image_picker: ^1.2.0
+  intl: ^0.18.1
+  connectivity_plus: ^6.0.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.4.1
+  share_plus: ^10.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/image/logo.png
+    - assets/icon/danhsachchuanop.png
+    - assets/icon/danhsachdaduyet.png
+    - assets/icon/duyetphieunop.png
+    - assets/icon/Hoadoncuatoi.png
+    - assets/icon/khoanchi.png
+    - assets/icon/phathoadon.png
+    - assets/icon/taikhoanquy.png
+    - assets/icon/thanhvienlop.png
+
+# ====== cấu hình launcher icon (Android + iOS) ======
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/image/logo.png
+  adaptive_icon_foreground: assets/image/logo.png
+  adaptive_icon_background: "#ADD8E6"
+  min_sdk_android: 21
+  remove_alpha_ios: true
+
+# ====== cấu hình splash screen (Android + iOS) ======
+flutter_native_splash:
+  color: "#ADD8E6"
+  color_dark: "#ADD8E6"
+  image: assets/image/logo.png
+  android_12:
+    icon_background_color: "#ADD8E6"
+    image: assets/image/logo.png
