@@ -1,3 +1,4 @@
+// lib/theme/app_theme.dart
 import 'package:flutter/material.dart';
 
 @immutable
@@ -12,25 +13,39 @@ class AppGradients extends ThemeExtension<AppGradients> {
   @override
   AppGradients lerp(ThemeExtension<AppGradients>? other, double t) {
     if (other is! AppGradients) return this;
-    // không cần lerp phức tạp cho gradient
-    return t < 0.5 ? this : other;
+    return AppGradients(
+        background: LinearGradient.lerp(
+            background as LinearGradient, other.background as LinearGradient, t)!
+    );
   }
+}
 
-  // === MÀU NỀN LIGHT (đổi ở đây)
-  static AppGradients light() => const AppGradients(
-    background: LinearGradient(
-      colors: [Color(0xFFF2F5FF), Color(0xFFFFFFFF)],
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
+ThemeData lightTheme(Color seed) {
+  final cs = ColorScheme.fromSeed(seedColor: seed, brightness: Brightness.light);
+  return ThemeData(
+    colorScheme: cs,
+    useMaterial3: true,
+  ).copyWith(extensions: [
+    AppGradients(
+      background: const LinearGradient(
+        colors: [Color(0xFFF2F5FF), Color(0xFFFFFFFF)],
+        begin: Alignment.topLeft, end: Alignment.bottomRight,
+      ),
     ),
-  );
+  ]);
+}
 
-  // === MÀU NỀN DARK (đổi ở đây)
-  static AppGradients dark() => const AppGradients(
-    background: LinearGradient(
-      colors: [Color(0xFF2F1156), Color(0xFF0F172A)],
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
+ThemeData darkTheme(Color seed) {
+  final cs = ColorScheme.fromSeed(seedColor: seed, brightness: Brightness.dark);
+  return ThemeData(
+    colorScheme: cs,
+    useMaterial3: true,
+  ).copyWith(extensions: [
+    AppGradients(
+      background: const LinearGradient(
+        colors: [Color(0xFF2F1156), Color(0xFF0F172A)],
+        begin: Alignment.topCenter, end: Alignment.bottomCenter,
+      ),
     ),
-  );
+  ]);
 }

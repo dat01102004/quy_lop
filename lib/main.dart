@@ -1,7 +1,9 @@
+// lib/main.dart
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'services/session.dart';
 import 'repos/auth_repository.dart';
@@ -22,7 +24,9 @@ import 'screens/expenses_page.dart';
 import 'screens/approved_payments_page.dart';
 import 'screens/ledger_page.dart';
 
-import 'theme/app_theme.dart';
+// Theme & App settings
+import 'theme/app_theme.dart';            // lightTheme(), darkTheme(), AppGradients
+import 'services/app_settings.dart';      // appSettingsProvider
 
 void main() {
   // Bắt mọi lỗi build để tránh “màn hình đen”
@@ -57,28 +61,40 @@ class LopFundApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Đọc cài đặt giao diện (màu/locale/scale/mode)
+    final settings = ref.watch(appSettingsProvider);
+
     // Dùng ref trong các route builder (closures)
     final r = ref;
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6C4AD1)),
-        extensions: <ThemeExtension<dynamic>>[
-          AppGradients.light(),   // nền light
-        ],
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFF6C4AD1), brightness: Brightness.light),
-        extensions: <ThemeExtension<dynamic>>[
-          AppGradients.dark(),    // nền dark
-        ],
-      ),
-      themeMode: ThemeMode.system, // hoặc ThemeMode.light/dark
       title: 'Lop Fund',
+
+      // THEME theo seed color & mode người dùng chọn trong Profile/Settings
+      theme: lightTheme(Color(settings.seed)),
+      darkTheme: darkTheme(Color(settings.seed)),
+      themeMode: settings.mode,
+
+      // NGÔN NGỮ
+      locale: Locale(settings.locale),
+      supportedLocales: const [Locale('vi'), Locale('en')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ],
+
+      // CỠ CHỮ (Text Scale)
+      builder: (context, child) {
+        final media = MediaQuery.of(context);
+        return MediaQuery(
+          data: media.copyWith(textScaler: TextScaler.linear(settings.textScale)),
+          child: child!,
+        );
+      },
+
+      // ROUTES
       routes: {
         '/login': (_) => const LoginPage(),
         '/register': (_) => const RegisterPage(),
@@ -95,7 +111,7 @@ class LopFundApp extends ConsumerWidget {
               body: Center(child: Text('Chưa chọn lớp — không thể mở Sổ quỹ')),
             );
           }
-          return LedgerPage(classId: id); // classId bắt buộc
+          return LedgerPage(classId: id);
         },
         '/fee-cycles/generate': (_) => const GenerateInvoicesPage(),
         '/classes': (_) => const ClassListPage(),
@@ -105,25 +121,21 @@ class LopFundApp extends ConsumerWidget {
           final id = s.classId ?? 0;
           if (id <= 0) {
             return const Scaffold(
-              body: Center(
-                  child: Text('Chưa chọn lớp — không thể mở danh sách đã duyệt')),
+              body: Center(child: Text('Chưa chọn lớp — không thể mở danh sách đã duyệt')),
             );
           }
           return ApprovedPaymentsPage(classId: id);
         },
-
         // /expenses nhận optional arguments: { classId?: int, feeCycleId?: int }
         '/expenses': (ctx) {
-          final args =
-          ModalRoute.of(ctx)?.settings.arguments as Map<String, dynamic>?;
+          final args = ModalRoute.of(ctx)?.settings.arguments as Map<String, dynamic>?;
           final sess = r.read(sessionProvider);
           final int classId = (args?['classId'] as int?) ?? (sess.classId ?? 0);
           final int? feeCycleId = args?['feeCycleId'] as int?;
 
           if (classId <= 0) {
             return const Scaffold(
-              body:
-              Center(child: Text('Chưa chọn lớp — không thể mở Khoản chi')),
+              body: Center(child: Text('Chưa chọn lớp — không thể mở Khoản chi')),
             );
           }
           return ExpensesPage(classId: classId, feeCycleId: feeCycleId);
@@ -136,10 +148,6 @@ class LopFundApp extends ConsumerWidget {
   }
 }
 
-/// “Cổng khởi động”
-/// - Chưa có token -> Login
-/// - Có token nhưng thiếu class/role -> gọi hydrate (timeout) rồi hướng dẫn Join / Tạo lớp
-/// - Đủ dữ liệu -> Home
 class StartupGate extends ConsumerStatefulWidget {
   const StartupGate({super.key});
   @override
@@ -165,8 +173,7 @@ class _StartupGateState extends ConsumerState<StartupGate> {
     // Chưa đăng nhập -> không hydrate
     if (s.token == null || s.token!.isEmpty) return;
 
-    final needHydrate =
-        s.classId == null || (s.role == null || s.role!.isEmpty);
+    final needHydrate = s.classId == null || (s.role == null || s.role!.isEmpty);
     if (!needHydrate) return;
 
     setState(() => _loading = true);
@@ -184,7 +191,6 @@ class _StartupGateState extends ConsumerState<StartupGate> {
     }
   }
 
-  /// Mở dialog & tạo lớp
   Future<void> _openCreateClass(BuildContext context) async {
     final controller = TextEditingController();
 
@@ -202,13 +208,8 @@ class _StartupGateState extends ConsumerState<StartupGate> {
           onSubmitted: (_) => Navigator.of(ctx).pop(controller.text.trim()),
         ),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Hủy')),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-            child: const Text('Tạo'),
-          ),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Hủy')),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(controller.text.trim()), child: const Text('Tạo')),
         ],
       ),
     );
@@ -218,7 +219,6 @@ class _StartupGateState extends ConsumerState<StartupGate> {
     try {
       await ref.read(classRepositoryProvider).createClass(name);
       if (!mounted) return;
-      // Sau khi repo đã set session (classId/role), vào Home
       Navigator.pushReplacementNamed(context, '/home');
     } catch (e) {
       if (!mounted) return;
@@ -232,12 +232,10 @@ class _StartupGateState extends ConsumerState<StartupGate> {
   Widget build(BuildContext context) {
     final s = ref.watch(sessionProvider);
 
-    // 1) chưa đăng nhập
     if (s.token == null || s.token!.isEmpty) {
       return const LoginPage();
     }
 
-    // 2) đang hydrate: luôn có UI (không để trống)
     if (_loading) {
       return const Scaffold(
         body: Center(
@@ -256,7 +254,6 @@ class _StartupGateState extends ConsumerState<StartupGate> {
       );
     }
 
-    // 3) có token nhưng chưa có class/role -> mời join / tạo lớp
     if (s.classId == null || (s.role ?? '').isEmpty) {
       return Scaffold(
         body: Center(
@@ -268,18 +265,15 @@ class _StartupGateState extends ConsumerState<StartupGate> {
                 const Text('Bạn chưa tham gia lớp nào.'),
                 const SizedBox(height: 12),
                 FilledButton(
-                  onPressed: () =>
-                      Navigator.pushReplacementNamed(context, '/join'),
+                  onPressed: () => Navigator.pushReplacementNamed(context, '/join'),
                   child: const Text('Tham gia lớp'),
                 ),
                 const SizedBox(height: 8),
                 OutlinedButton(
-                  onPressed: () =>
-                      Navigator.pushReplacementNamed(context, '/classes'),
+                  onPressed: () => Navigator.pushReplacementNamed(context, '/classes'),
                   child: const Text('Danh sách lớp'),
                 ),
                 const SizedBox(height: 8),
-                // ✅ thêm nút tạo lớp
                 TextButton.icon(
                   onPressed: () => _openCreateClass(context),
                   icon: const Icon(Icons.add_circle_outline),
@@ -292,7 +286,6 @@ class _StartupGateState extends ConsumerState<StartupGate> {
       );
     }
 
-    // 4) đủ dữ liệu
     return const HomePage();
   }
 }

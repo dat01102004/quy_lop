@@ -1,17 +1,22 @@
+// lib/screens/expenses_page.dart
+import 'dart:ui';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 
 import '../repos/expense_repository.dart';
 import '../repos/fee_cycle_repository.dart';
 import '../services/api.dart';
 import '../services/session.dart';
 import '../services/network.dart';
+import '../theme/app_theme.dart';
 
 class ExpensesPage extends ConsumerStatefulWidget {
-  final int classId;        // có thể = 0 để fallback session
-  final int? feeCycleId;    // lọc theo kỳ (nullable)
+  final int classId; // có thể = 0 để fallback session
+  final int? feeCycleId; // lọc theo kỳ (nullable)
 
   const ExpensesPage({
     super.key,
@@ -34,10 +39,13 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
 
   final CancelToken _cancelToken = CancelToken();
 
+  final NumberFormat _money = NumberFormat.decimalPattern('vi_VN');
+  String _formatMoney(num v) => '${_money.format(v)} đ';
+
   @override
   void initState() {
     super.initState();
-    _load(); // tải lần đầu khi vào trang
+    _load();
   }
 
   @override
@@ -48,13 +56,11 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
     super.dispose();
   }
 
-  /// Lấy classId hiệu lực: ưu tiên param route (>0), nếu không thì lấy từ session
   int _effectiveClassId() {
     if (widget.classId > 0) return widget.classId;
     return ref.read(sessionProvider).classId ?? 0;
   }
 
-  /// Chuẩn hoá proof/receipt path thành URL đầy đủ
   String _fullUrl(String? path) {
     if (path == null || path.isEmpty) return '';
     if (path.startsWith('http://') || path.startsWith('https://')) return path;
@@ -62,10 +68,7 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
     final base = ref.read(dioProvider).options.baseUrl; // vd http://10.0.2.2:8000/api
     final host = base.endsWith('/api') ? base.substring(0, base.length - 4) : base;
 
-    // BE có thể trả "receipts/xxx.jpg" hoặc "/storage/receipts/xxx.jpg"
-    if (path.startsWith('/')) {
-      return '$host$path';
-    }
+    if (path.startsWith('/')) return '$host$path';
     return '$host/$path';
   }
 
@@ -75,9 +78,8 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
       final list = await ref.read(feeCycleRepositoryProvider).listCycles(classId);
       if (!mounted) return;
       setState(() => _cycles = list);
-    } on DioException catch (_) {
-      // im lặng theo đúng ý đồ (form sẽ hiển thị "chưa có kỳ thu")
-      // final msg = prettyDioError(_); // nếu cần log nội bộ
+    } catch (_) {
+      // im lặng
     } finally {
       if (mounted) setState(() => _loadingCycles = false);
     }
@@ -100,7 +102,6 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
       return;
     }
 
-    // load cycles cho form (không chặn UI)
     _loadCycles(classId);
 
     try {
@@ -111,12 +112,8 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
         cancelToken: _cancelToken,
       );
 
-      // Nếu đang lọc theo kỳ mà rỗng, thử lấy all để cảnh báo user
       if (widget.feeCycleId != null && list.isEmpty) {
-        final all = await repo.listExpenses(
-          classId: classId,
-          cancelToken: _cancelToken,
-        );
+        final all = await repo.listExpenses(classId: classId, cancelToken: _cancelToken);
         if (all.isNotEmpty && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Không có khoản chi thuộc kỳ đã chọn.')),
@@ -135,12 +132,11 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
         setState(() => loading = false);
         return;
       }
-      final msg = prettyDioError(e); // 👈 dùng helper
+      final msg = prettyDioError(e);
       setState(() {
         err = msg;
         loading = false;
       });
-      // Thông báo thêm nếu 401
       if (e.response?.statusCode == 401) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Phiên đã hết/thiếu token. Vui lòng đăng nhập lại.')),
@@ -148,7 +144,7 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
       }
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         err = 'Không tải được danh sách khoản chi';
@@ -168,7 +164,6 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
     final amountCtl = TextEditingController(text: expense?['amount']?.toString() ?? '');
     final noteCtl = TextEditingController(text: expense?['note']?.toString() ?? '');
 
-    // cycle & date & receipt
     int? selectedCycleId = expense?['fee_cycle_id'] as int? ?? widget.feeCycleId;
     DateTime? purchaseDate;
     XFile? pickedReceipt;
@@ -187,18 +182,15 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Tiêu đề
                   TextFormField(
                     controller: titleCtl,
                     decoration: const InputDecoration(labelText: 'Tiêu đề'),
                     validator: (v) => (v == null || v.trim().isEmpty) ? 'Nhập tiêu đề' : null,
                   ),
                   const SizedBox(height: 8),
-
-                  // Số tiền
                   TextFormField(
                     controller: amountCtl,
-                    decoration: const InputDecoration(labelText: 'Số tiền'),
+                    decoration: const InputDecoration(labelText: 'Số tiền (VND)'),
                     keyboardType: TextInputType.number,
                     validator: (v) {
                       final raw = (v ?? '').replaceAll(RegExp(r'[^0-9]'), '');
@@ -208,8 +200,6 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
                     },
                   ),
                   const SizedBox(height: 8),
-
-                  // Kỳ thu
                   InputDecorator(
                     decoration: const InputDecoration(
                       labelText: 'Kỳ thu',
@@ -229,18 +219,18 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
                             value: null,
                             child: Text('— Không gán kỳ —'),
                           ),
-                          ..._cycles.map((c) => DropdownMenuItem<int?>(
-                            value: c['id'] as int,
-                            child: Text(c['name']?.toString() ?? 'Kỳ'),
-                          )),
+                          ..._cycles.map(
+                                (c) => DropdownMenuItem<int?>(
+                              value: c['id'] as int,
+                              child: Text(c['name']?.toString() ?? 'Kỳ'),
+                            ),
+                          ),
                         ],
                         onChanged: (v) => setLocal(() => selectedCycleId = v),
                       ),
                     ),
                   ),
                   const SizedBox(height: 8),
-
-                  // Ngày mua (ghi tạm vào note)
                   Row(
                     children: [
                       Expanded(
@@ -259,9 +249,7 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
                             firstDate: DateTime(now.year - 2),
                             lastDate: DateTime(now.year + 2),
                           );
-                          if (picked != null) {
-                            setLocal(() => purchaseDate = picked);
-                          }
+                          if (picked != null) setLocal(() => purchaseDate = picked);
                         },
                         icon: const Icon(Icons.event),
                         label: const Text('Chọn ngày'),
@@ -269,15 +257,11 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
                     ],
                   ),
                   const SizedBox(height: 8),
-
-                  // Ghi chú
                   TextFormField(
                     controller: noteCtl,
                     decoration: const InputDecoration(labelText: 'Ghi chú'),
                   ),
                   const SizedBox(height: 8),
-
-                  // Upload hóa đơn
                   Row(
                     children: [
                       ElevatedButton.icon(
@@ -321,7 +305,6 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
     if (ok == true) {
       final repo = ref.read(expenseRepositoryProvider);
       final amount = int.parse(amountCtl.text.replaceAll(RegExp(r'[^0-9]'), ''));
-      // nối ngày mua vào note (tạm) để không cần đổi BE
       final extraNote = purchaseDate != null ? 'Ngày mua: ${_formatDate(purchaseDate!)}' : null;
       final finalNote = [
         if ((noteCtl.text.trim().isNotEmpty)) noteCtl.text.trim(),
@@ -330,7 +313,6 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
 
       try {
         if (expense == null) {
-          // Tạo mới
           final created = await repo.createExpense(
             classId: classId,
             title: titleCtl.text.trim(),
@@ -339,7 +321,6 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
             note: finalNote.isEmpty ? null : finalNote,
           );
 
-          // Thử upload hoá đơn nếu có và server trả id
           final newId = (created is Map)
               ? (created['expense']?['id'] ?? created['id'])
               : null;
@@ -360,7 +341,6 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
             }
           }
         } else {
-          // Cập nhật
           await repo.updateExpense(
             classId: classId,
             expenseId: expense['id'] as int,
@@ -380,9 +360,9 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
         if (mounted) _load();
       } on DioException catch (e) {
         if (!mounted) return;
-        final msg = prettyDioError(e); // 👈 dùng helper
+        final msg = prettyDioError(e);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-      } catch (e) {
+      } catch (_) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Lưu khoản chi thất bại')),
@@ -411,9 +391,9 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
       if (mounted) _load();
     } on DioException catch (e) {
       if (!mounted) return;
-      final msg = prettyDioError(e); // 👈 dùng helper
+      final msg = prettyDioError(e);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Lỗi xoá: $msg')));
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Không xoá được khoản chi')),
@@ -436,9 +416,9 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
       if (mounted) _load();
     } on DioException catch (e) {
       if (!mounted) return;
-      final msg = prettyDioError(e); // 👈 dùng helper
+      final msg = prettyDioError(e);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload lỗi: $msg')));
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Upload biên nhận thất bại')),
@@ -448,120 +428,322 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ Riverpod listen
+    // nghe thay đổi session để reload
     ref.listen<SessionState>(sessionProvider, (prev, next) {
       if (!mounted) return;
       final tokenChanged = prev?.token != next.token;
       final classChanged = prev?.classId != next.classId;
-      if (tokenChanged || classChanged) {
-        _load();
-      }
+      if (tokenChanged || classChanged) _load();
     });
 
     final s = ref.watch(sessionProvider);
     final role = (s.role ?? '').toLowerCase();
     final canManage = role == 'owner' || role == 'treasurer';
+    final gradient = Theme.of(context).extension<AppGradients>()?.background;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Khoản chi')),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : err != null
-          ? Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text(err!, style: const TextStyle(color: Colors.red)),
+    return Container(
+      decoration: gradient == null ? null : BoxDecoration(gradient: gradient),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          scrolledUnderElevation: 0,
+          backgroundColor: Colors.transparent,
+          title: const Text('Khoản chi'),
         ),
-      )
-          : expenses.isEmpty
-          ? const Center(child: Text('Chưa có khoản chi'))
-          : RefreshIndicator(
-        onRefresh: _load,
-        child: ListView.builder(
-          itemCount: expenses.length,
-          itemBuilder: (_, i) {
-            final e = expenses[i];
-            final id = e['id'];
-            final title = e['title']?.toString() ?? '';
-            final amount = e['amount']?.toString() ?? '0';
-
-            final receiptUrl = (() {
-              final direct = (e['receipt_url'] as String?)?.trim();
-              if (direct != null && direct.isNotEmpty) return direct;
-              return _fullUrl(e['receipt_path']?.toString());
-            })();
-
-            final sub = [
-              if ((e['note'] ?? '').toString().isNotEmpty) 'Ghi chú: ${e['note']}',
-              if ((e['created_by_name'] ?? '').toString().isNotEmpty)
-                'Bởi: ${e['created_by_name']}',
-              if ((e['cycle_name'] ?? '').toString().isNotEmpty)
-                'Kỳ: ${e['cycle_name']}',
-            ].join('\n');
-
-            return Card(
-              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: ListTile(
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => ExpenseDetailPage(
-                        expense: e,
-                        imageUrl: receiptUrl,
-                        heroTag: 'exp_$id',
-                      ),
-                    ),
-                  );
-                },
-                leading: receiptUrl.isEmpty
-                    ? const Icon(Icons.receipt_long_outlined)
-                    : Hero(
-                  tag: 'exp_$id',
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: Image.network(
-                      receiptUrl,
-                      width: 44,
-                      height: 44,
-                      fit: BoxFit.cover,
-                      gaplessPlayback: true,
-                      errorBuilder: (_, __, ___) =>
-                      const Icon(Icons.broken_image_outlined),
-                    ),
-                  ),
-                ),
-                title: Text('$title • ${amount}đ'),
-                subtitle: sub.isEmpty ? null : Text(sub),
-                trailing: canManage
-                    ? PopupMenuButton<String>(
-                  onSelected: (val) {
-                    if (val == 'edit') {
-                      _showForm(expense: e);
-                    } else if (val == 'delete') {
-                      _deleteExpense(e['id'] as int);
-                    } else if (val == 'receipt') {
-                      _uploadReceipt(e['id'] as int);
-                    }
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'edit', child: Text('Sửa')),
-                    PopupMenuItem(value: 'delete', child: Text('Xoá')),
-                    PopupMenuItem(value: 'receipt', child: Text('Tải biên nhận')),
-                  ],
-                )
-                    : null,
-              ),
-            );
-          },
+        body: loading
+            ? const Center(child: CircularProgressIndicator())
+            : err != null
+            ? Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(err!, style: const TextStyle(color: Colors.red)),
+          ),
+        )
+            : expenses.isEmpty
+            ? _EmptyState(
+          canManage: canManage,
+          onAdd: () => _showForm(),
+        )
+            : RefreshIndicator(
+          onRefresh: _load,
+          child: ListView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            itemCount: expenses.length,
+            itemBuilder: (_, i) => _ExpenseTile(
+              data: expenses[i],
+              formatMoney: _formatMoney,
+              fullUrl: _fullUrl,
+              canManage: canManage,
+              onEdit: () => _showForm(expense: expenses[i]),
+              onDelete: () => _deleteExpense(expenses[i]['id'] as int),
+              onUpload: () => _uploadReceipt(expenses[i]['id'] as int),
+            ),
+          ),
         ),
+        floatingActionButton:
+        canManage ? FloatingActionButton(onPressed: () => _showForm(), child: const Icon(Icons.add)) : null,
       ),
-      floatingActionButton:
-      canManage ? FloatingActionButton(onPressed: () => _showForm(), child: const Icon(Icons.add)) : null,
     );
   }
 }
 
-/// Trang chi tiết khoản chi (xem ảnh full & thông tin)
+/// ======= UI bits =======
+
+class _GlassCard extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final double radius;
+  const _GlassCard({required this.child, this.padding = const EdgeInsets.all(16), this.radius = 16});
+
+  @override
+  Widget build(BuildContext context) {
+    final base = Theme.of(context).colorScheme.surface.withOpacity(.78);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: Container(
+          decoration: BoxDecoration(
+            color: base,
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outlineVariant.withOpacity(.22),
+            ),
+            borderRadius: BorderRadius.circular(radius),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(.05),
+                blurRadius: 12,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Padding(padding: padding, child: child),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  final bool canManage;
+  final VoidCallback onAdd;
+  const _EmptyState({required this.canManage, required this.onAdd});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: _GlassCard(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.receipt_long_outlined, size: 36),
+            const SizedBox(height: 8),
+            const Text('Chưa có khoản chi'),
+            if (canManage) ...[
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                onPressed: onAdd,
+                icon: const Icon(Icons.add),
+                label: const Text('Thêm khoản chi'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ExpenseTile extends StatelessWidget {
+  final Map<String, dynamic> data;
+  final String Function(num) formatMoney;
+  final String Function(String?) fullUrl;
+  final bool canManage;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final VoidCallback onUpload;
+
+  const _ExpenseTile({
+    required this.data,
+    required this.formatMoney,
+    required this.fullUrl,
+    required this.canManage,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onUpload,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final id = data['id'];
+    final title = (data['title'] ?? '').toString();
+    final num amountNum = (data['amount'] is num)
+        ? data['amount'] as num
+        : (int.tryParse('${data['amount']}') ?? 0);
+
+    final receiptUrl = (() {
+      final direct = (data['receipt_url'] as String?)?.trim();
+      if (direct != null && direct.isNotEmpty) return direct;
+      return fullUrl(data['receipt_path']?.toString());
+    })();
+
+    final note = (data['note'] ?? '').toString();
+    final who = (data['created_by_name'] ?? '').toString();
+    final cycle = (data['cycle_name'] ?? '').toString();
+
+    return _GlassCard(
+      padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => ExpenseDetailPage(
+                expense: data,
+                imageUrl: receiptUrl,
+                heroTag: 'exp_$id',
+              ),
+            ),
+          );
+        },
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // thumbnail
+            _Thumb(url: receiptUrl, heroTag: 'exp_$id'),
+            const SizedBox(width: 12),
+            // texts
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title.isEmpty ? '(Chưa đặt tiêu đề)' : title,
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      Text(
+                        formatMoney(amountNum),
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  if (cycle.isNotEmpty)
+                    _InfoRow(
+                      icon: Icons.event_note,
+                      text: 'Kỳ: $cycle',
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                  if (note.isNotEmpty) const SizedBox(height: 2),
+                  if (note.isNotEmpty)
+                    _InfoRow(
+                      icon: Icons.notes_outlined,
+                      text: note,
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                  if (who.isNotEmpty) const SizedBox(height: 2),
+                  if (who.isNotEmpty)
+                    _InfoRow(
+                      icon: Icons.person_outline,
+                      text: 'Bởi: $who',
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                ],
+              ),
+            ),
+            if (canManage)
+              PopupMenuButton<String>(
+                onSelected: (val) {
+                  if (val == 'edit') onEdit();
+                  if (val == 'delete') onDelete();
+                  if (val == 'receipt') onUpload();
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'edit', child: Text('Sửa')),
+                  PopupMenuItem(value: 'delete', child: Text('Xoá')),
+                  PopupMenuItem(value: 'receipt', child: Text('Tải biên nhận')),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Thumb extends StatelessWidget {
+  final String url;
+  final String heroTag;
+  const _Thumb({required this.url, required this.heroTag});
+
+  @override
+  Widget build(BuildContext context) {
+    final box = Container(
+      width: 54,
+      height: 54,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: const Icon(Icons.receipt_long_outlined),
+    );
+
+    if (url.isEmpty) return box;
+
+    return Hero(
+      tag: heroTag,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Image.network(
+          url,
+          width: 54,
+          height: 54,
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+          errorBuilder: (_, __, ___) => box,
+        ),
+      ),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final Color? color;
+  const _InfoRow({required this.icon, required this.text, this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Trang chi tiết khoản chi
 class ExpenseDetailPage extends StatelessWidget {
   final Map<String, dynamic> expense;
   final String imageUrl;
@@ -576,8 +758,13 @@ class ExpenseDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final NumberFormat money = NumberFormat.decimalPattern('vi_VN');
+    String moneyStr(num v) => '${money.format(v)} đ';
+
     final title = (expense['title'] ?? '').toString();
-    final amount = (expense['amount'] ?? '').toString();
+    final num amountNum = (expense['amount'] is num)
+        ? expense['amount'] as num
+        : (int.tryParse('${expense['amount']}') ?? 0);
     final note = (expense['note'] ?? '').toString();
     final who = (expense['created_by_name'] ?? '').toString();
     final cycle = (expense['cycle_name'] ?? '').toString();
@@ -614,24 +801,34 @@ class ExpenseDetailPage extends StatelessWidget {
             ),
             const SizedBox(height: 12),
           ],
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('$title • ${amount}đ',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  if (note.isNotEmpty) ...[
-                    const Text('Ghi chú:', style: TextStyle(fontWeight: FontWeight.w600)),
-                    Text(note),
-                    const SizedBox(height: 8),
-                  ],
-                  if (cycle.isNotEmpty) Text('Kỳ: $cycle'),
-                  if (who.isNotEmpty) Text('Bởi: $who'),
+          _GlassCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title.isEmpty ? '(Chưa đặt tiêu đề)' : title,
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleLarge
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  moneyStr(amountNum),
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 12),
+                if (note.isNotEmpty) ...[
+                  const Text('Ghi chú:', style: TextStyle(fontWeight: FontWeight.w600)),
+                  Text(note),
+                  const SizedBox(height: 10),
                 ],
-              ),
+                if (cycle.isNotEmpty) Text('Kỳ: $cycle'),
+                if (who.isNotEmpty) Text('Bởi: $who'),
+              ],
             ),
           ),
         ],

@@ -1,3 +1,4 @@
+// lib/screens/home_page.dart
 import 'dart:ui';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -8,7 +9,8 @@ import '../repos/auth_repository.dart';
 import '../repos/class_repository.dart';
 import '../repos/fund_account_repository.dart';
 import '../services/session.dart';
-import '../services/network.dart';
+import '../services/network.dart';        // prettyDioError
+import '../services/dio_provider.dart';   // dioProvider (nếu bạn đang dùng)
 
 import 'profile/profile_page.dart';
 import 'class_list_page.dart';
@@ -33,6 +35,41 @@ const List<String> _kFundAccountMiniIcons = [
   'assets/icon/taikhoanquy.png',
 ];
 
+/// ====== Model thông báo rất gọn ======
+class _Notif {
+  final String id;
+  final String type; // 'income' | 'expense'
+  final String title;
+  final int amount; // VND
+  final DateTime createdAt;
+  bool read;
+
+  _Notif({
+    required this.id,
+    required this.type,
+    required this.title,
+    required this.amount,
+    required this.createdAt,
+    this.read = false,
+  });
+
+  factory _Notif.fromJson(Map<String, dynamic> j) => _Notif(
+    id: (j['id'] ?? '').toString(),
+    type: (j['type'] ?? 'income').toString(),
+    title: (j['title'] ?? '').toString(),
+    amount: _toInt(j['amount']),
+    createdAt: DateTime.tryParse((j['created_at'] ?? '').toString()) ??
+        DateTime.now(),
+    read: (j['read'] ?? false) == true,
+  );
+
+  static int _toInt(dynamic v) {
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse(v?.toString() ?? '') ?? 0;
+  }
+}
+
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
   @override
@@ -46,10 +83,18 @@ class _HomePageState extends ConsumerState<HomePage> {
   String? _className;
   num? _balance;
 
+  // ====== state thông báo
+  final _money = NumberFormat.decimalPattern('vi_VN');
+  List<_Notif> _notifs = const [];
+  bool get _hasUnread => _notifs.any((n) => !n.read);
+
   @override
   void initState() {
     super.initState();
-    _loadMe().then((_) => _loadCurrentClassInfo());
+    _loadMe().then((_) async {
+      await _loadCurrentClassInfo();
+      await _loadNotifications(); // tải thông báo
+    });
   }
 
   Future<void> _fallbackHydrateIfNeeded() async {
@@ -60,18 +105,22 @@ class _HomePageState extends ConsumerState<HomePage> {
         if (classes.isNotEmpty) {
           Map<String, dynamic> picked = classes.first;
           for (final c in classes) {
-            if ((c['member_status'] ?? 'active') == 'active') { picked = c; break; }
+            if ((c['member_status'] ?? 'active') == 'active') {
+              picked = c;
+              break;
+            }
           }
           final classIdAny = (picked['id'] ?? picked['class_id']);
           final role = (picked['role'] ?? 'member').toString();
           if (classIdAny != null) {
-            final idInt = classIdAny is int ? classIdAny : int.tryParse(classIdAny.toString());
+            final idInt =
+            classIdAny is int ? classIdAny : int.tryParse(classIdAny.toString());
             if (idInt != null) {
               await ref.read(sessionProvider.notifier).setClass(idInt);
               await ref.read(sessionProvider.notifier).setRole(role);
             }
           }
-          if (mounted) setState((){});
+          if (mounted) setState(() {});
         }
       } catch (_) {}
     }
@@ -81,24 +130,29 @@ class _HomePageState extends ConsumerState<HomePage> {
     try {
       final data = await ref.read(authRepositoryProvider).me();
       if (!mounted) return;
-      setState(() { me = data; err = null; });
+      setState(() {
+        me = data;
+        err = null;
+      });
       await _fallbackHydrateIfNeeded();
     } on DioException catch (e) {
       final msg = prettyDioError(e);
       if (mounted) {
         setState(() => err = msg);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(msg)));
       }
     } catch (_) {
       const msg = 'Có lỗi xảy ra';
       if (mounted) {
         setState(() => err = msg);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(msg)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text(msg)));
       }
     }
   }
 
-  int _toInt(dynamic v) {
+  static int _toInt(dynamic v) {
     if (v is int) return v;
     if (v is num) return v.toInt();
     return int.tryParse(v?.toString() ?? '') ?? 0;
@@ -107,27 +161,78 @@ class _HomePageState extends ConsumerState<HomePage> {
   Future<void> _loadCurrentClassInfo() async {
     final s = ref.read(sessionProvider);
     if (s.classId == null) {
-      setState(() { _className = null; _balance = null; });
+      setState(() {
+        _className = null;
+        _balance = null;
+      });
       return;
     }
     try {
-      final summary = await ref.read(fundAccountRepositoryProvider).getSummary(classId: s.classId!);
+      final summary = await ref
+          .read(fundAccountRepositoryProvider)
+          .getSummary(classId: s.classId!);
       final balance = _toInt(summary['balance']);
-      setState(() { _balance = balance; });
+      setState(() => _balance = balance);
 
       if (_className == null) {
         final classes = await ref.read(classRepositoryProvider).myClasses();
-        final hit = classes.firstWhere((c) => (c['id'] == s.classId), orElse: () => {});
-        if (hit.isNotEmpty) setState(() { _className = (hit['name'] ?? '').toString(); });
+        final hit =
+        classes.firstWhere((c) => (c['id'] == s.classId), orElse: () => {});
+        if (hit.isNotEmpty) {
+          setState(() => _className = (hit['name'] ?? '').toString());
+        }
       }
     } catch (_) {}
   }
 
-  Future<void> _logout() async {
-    await ref.read(authRepositoryProvider).logout();
-    if (mounted) {
-      Navigator.of(context).pushNamedAndRemoveUntil('/login', (r) => false);
+  /// ====== LOAD thông báo thu/chi
+  Future<void> _loadNotifications() async {
+    final s = ref.read(sessionProvider);
+    if (s.classId == null) return;
+
+    try {
+      final dio = ref.read(dioProvider);
+      // ĐỔI endpoint cho khớp BE của bạn
+      final res = await dio.get(
+        '/classes/${s.classId}/notifications',
+        queryParameters: {'limit': 20},
+      );
+      final List list = res.data is List ? (res.data as List) : [];
+      final items = list
+          .map((e) => _Notif.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+      if (!mounted) return;
+      setState(() => _notifs = items);
+    } catch (_) {
+      // Fallback dữ liệu mẫu cho UI (không crash)
+      final now = DateTime.now();
     }
+  }
+
+  void _markAllRead() {
+    setState(() {
+      for (final n in _notifs) n.read = true;
+    });
+  }
+
+  void _openNotificationsSheet() {
+    showModalBottomSheet(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _NotificationsSheet(
+        items: _notifs,
+        onMarkAllRead: () {
+          _markAllRead();
+          Navigator.pop(context);
+        },
+        onOpenLedger: () {
+          Navigator.pop(context);
+          Navigator.of(context).pushNamed('/reports/ledger');
+        },
+      ),
+    );
   }
 
   @override
@@ -156,7 +261,8 @@ class _HomePageState extends ConsumerState<HomePage> {
         appBar: AppBar(
           scrolledUnderElevation: 0,
           backgroundColor: Colors.transparent,
-          title: const Text('QUỸ LỚP', style: TextStyle(fontWeight: FontWeight.w800)),
+          title: const Text('QUỸ LỚP',
+              style: TextStyle(fontWeight: FontWeight.w800)),
           actions: [
             IconButton(
               tooltip: 'Sổ quỹ',
@@ -165,17 +271,49 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
             IconButton(
               tooltip: 'Làm mới',
-              onPressed: () async { await _loadMe(); await _loadCurrentClassInfo(); },
+              onPressed: () async {
+                await _loadMe();
+                await _loadCurrentClassInfo();
+                await _loadNotifications();
+              },
               icon: const Icon(Icons.refresh),
             ),
-            PopupMenuButton<String>(
-              onSelected: (v) { if (v == 'logout') _logout(); },
-              itemBuilder: (ctx) => const [PopupMenuItem(value: 'logout', child: Text('Đăng xuất'))],
+
+            // 🔔 Chuông thông báo (thay menu 3 chấm)
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  IconButton(
+                    tooltip: 'Thông báo thu/chi',
+                    onPressed: _openNotificationsSheet,
+                    icon: const Icon(Icons.notifications_none_rounded),
+                  ),
+                  if (_hasUnread)
+                    Positioned(
+                      right: 8,
+                      top: 10,
+                      child: Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ],
         ),
         body: RefreshIndicator(
-          onRefresh: () async { await _loadMe(); await _loadCurrentClassInfo(); },
+          onRefresh: () async {
+            await _loadMe();
+            await _loadCurrentClassInfo();
+            await _loadNotifications();
+          },
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
             children: [
@@ -189,31 +327,38 @@ class _HomePageState extends ConsumerState<HomePage> {
                 name: displayName,
                 email: s.email ?? (me?['email'] as String?) ?? '',
                 role: s.role ?? 'member',
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilePage())),
+                onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const ProfilePage())),
               ),
               const SizedBox(height: 14),
 
               if (s.classId == null)
-                _EmptyClassCardModern(onJoin: () => Navigator.of(context).pushNamed('/join'))
+                _EmptyClassCardModern(
+                    onJoin: () => Navigator.of(context).pushNamed('/join'))
               else
                 _CurrentClassCardModern(
                   classId: s.classId!,
                   className: _className ?? 'Lớp đã tham gia',
                   balance: _balance,
-                  showFundShortcuts: isTreasurer, // chỉ Owner/Thủ quỹ có icon mini
+                  showFundShortcuts: isTreasurer, // Owner/Thủ quỹ mới có icon mini
                   fundMiniIcons: _kFundAccountMiniIcons,
                   onPickClass: () async {
-                    final picked = await Navigator.of(context).push<Map<String, dynamic>>(
+                    final picked =
+                    await Navigator.of(context).push<Map<String, dynamic>>(
                       MaterialPageRoute(builder: (_) => const ClassListPage()),
                     );
                     if (picked != null) {
-                      setState(() { _className = (picked['name'] ?? '').toString(); });
+                      setState(() =>
+                      _className = (picked['name'] ?? '').toString());
                       await _loadCurrentClassInfo();
                     }
                   },
-                  // luôn hiển thị nút thành viên cạnh số dư (member vẫn xem được)
+                  // luôn hiển thị nút thành viên (member xem được, không set role)
                   onOpenMembers: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => ClassMembersPage(classId: s.classId!)),
+                    MaterialPageRoute(
+                        builder: (_) => ClassMembersPage(classId: s.classId!)),
                   ),
                 ),
 
@@ -221,7 +366,7 @@ class _HomePageState extends ConsumerState<HomePage> {
               const _SectionTitle(title: 'Tính năng nhanh'),
               const SizedBox(height: 10),
 
-              // Lưới Ô VUÔNG (icon to + text dưới), không mất chữ
+              // Lưới Ô VUÔNG (icon to + text dưới)
               _ActionsSquareGrid(
                 children: [
                   _ActionSquareCard(
@@ -237,14 +382,16 @@ class _HomePageState extends ConsumerState<HomePage> {
                       fallbackIcon: Icons.verified,
                       title: 'Duyệt phiếu nộp',
                       subtitle: 'Xử lý chứng từ',
-                      onTap: () => Navigator.of(context).pushNamed('/payments/review'),
+                      onTap: () =>
+                          Navigator.of(context).pushNamed('/payments/review'),
                     ),
                   _ActionSquareCard(
                     assetIcon: _kIcon.approved,
                     fallbackIcon: Icons.fact_check,
                     title: 'Hoá đơn đã duyệt',
                     subtitle: 'Danh sách đã thanh toán',
-                    onTap: () => Navigator.of(context).pushNamed('/payments/approved'),
+                    onTap: () =>
+                        Navigator.of(context).pushNamed('/payments/approved'),
                   ),
                   if (isTreasurer)
                     _ActionSquareCard(
@@ -267,35 +414,121 @@ class _HomePageState extends ConsumerState<HomePage> {
                       fallbackIcon: Icons.upload_file,
                       title: 'Phát hóa đơn',
                       subtitle: 'Tạo kỳ thu nhanh',
-                      onTap: () => Navigator.of(context).pushNamed('/fee-cycles/generate'),
+                      onTap: () =>
+                          Navigator.of(context).pushNamed('/fee-cycles/generate'),
                     ),
-
-                  // if (isTreasurer)
-                  //   _ActionSquareCard(
-                  //     assetIcon: _kIcon.fund,
-                  //     fallbackIcon: Icons.account_balance,
-                  //     title: 'Tài khoản quỹ',
-                  //     subtitle: 'Cấu hình tài khoản',
-                  //     onTap: () async {
-                  //       final currentClassId = ref.read(sessionProvider).classId;
-                  //       if (currentClassId == null) {
-                  //         ScaffoldMessenger.of(context).showSnackBar(
-                  //           const SnackBar(content: Text('Chưa chọn lớp — không thể cấu hình TK quỹ')),
-                  //         );
-                  //         return;
-                  //       }
-                  //       await showModalBottomSheet(
-                  //         context: context,
-                  //         isScrollControlled: true,
-                  //         useSafeArea: true,
-                  //         builder: (_) => FundAccountSheet(classId: currentClassId),
-                  //       );
-                  //     },
-                  //   ),
                 ],
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// ================== NOTIFICATIONS SHEET ==================
+class _NotificationsSheet extends StatelessWidget {
+  final List<_Notif> items;
+  final VoidCallback onMarkAllRead;
+  final VoidCallback onOpenLedger;
+  const _NotificationsSheet({
+    required this.items,
+    required this.onMarkAllRead,
+    required this.onOpenLedger,
+  });
+
+  String _fmtVn(int v) =>
+      '${NumberFormat.decimalPattern('vi_VN').format(v)} đ';
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Text('Thông báo thu/chi',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(fontWeight: FontWeight.w800)),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: onOpenLedger,
+                  icon: const Icon(Icons.menu_book_outlined, size: 18),
+                  label: const Text('Xem sổ quỹ'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Flexible(
+              child: items.isEmpty
+                  ? const Padding(
+                padding: EdgeInsets.all(24),
+                child: Text('Chưa có thông báo'),
+              )
+                  : ListView.separated(
+                shrinkWrap: true,
+                itemCount: items.length,
+                separatorBuilder: (_, __) =>
+                    Divider(height: 1, color: cs.outlineVariant),
+                itemBuilder: (ctx, i) {
+                  final n = items[i];
+                  final isIncome = n.type == 'income';
+                  final icon =
+                  isIncome ? Icons.trending_up : Icons.trending_down;
+                  final color = isIncome ? Colors.green : Colors.red;
+                  return ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: cs.primaryContainer,
+                      child: Icon(icon, color: color),
+                    ),
+                    title: Text(n.title,
+                        maxLines: 2, overflow: TextOverflow.ellipsis),
+                    subtitle: Text(
+                      '${n.createdAt.hour.toString().padLeft(2, '0')}:${n.createdAt.minute.toString().padLeft(2, '0')} '
+                          '${n.createdAt.day.toString().padLeft(2, '0')}/${n.createdAt.month.toString().padLeft(2, '0')}',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: cs.outline),
+                    ),
+                    trailing: Text(
+                      (isIncome ? '+ ' : '- ') + _fmtVn(n.amount),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: color,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onMarkAllRead,
+                    icon: const Icon(Icons.done_all),
+                    label: const Text('Đánh dấu đã đọc'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Đóng'),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -318,7 +551,8 @@ class _GlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final base = (color ?? Theme.of(context).colorScheme.surface).withOpacity(.75);
+    final base =
+    (color ?? Theme.of(context).colorScheme.surface).withOpacity(.75);
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
       child: BackdropFilter(
@@ -327,7 +561,8 @@ class _GlassCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: base,
             border: Border.all(
-              color: Theme.of(context).colorScheme.outlineVariant.withOpacity(.25),
+              color:
+              Theme.of(context).colorScheme.outlineVariant.withOpacity(.25),
             ),
             borderRadius: BorderRadius.circular(borderRadius),
             boxShadow: [
@@ -359,7 +594,11 @@ class _GreetingCardModern extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final roleLabel = switch (role) { 'owner' => 'Owner', 'treasurer' => 'Thủ quỹ', _ => 'Thành viên', };
+    final roleLabel = switch (role) {
+      'owner' => 'Owner',
+      'treasurer' => 'Thủ quỹ',
+      _ => 'Thành viên',
+    };
 
     return _GlassCard(
       child: InkWell(
@@ -381,7 +620,10 @@ class _GreetingCardModern extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Xin chào, $name',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 2),
                   Text(
                     email,
@@ -393,12 +635,14 @@ class _GreetingCardModern extends StatelessWidget {
               ),
             ),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.primaryContainer,
                 borderRadius: BorderRadius.circular(999),
               ),
-              child: Text(roleLabel, style: Theme.of(context).textTheme.labelMedium),
+              child: Text(roleLabel,
+                  style: Theme.of(context).textTheme.labelMedium),
             ),
           ],
         ),
@@ -418,7 +662,10 @@ class _EmptyClassCardModern extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Bạn chưa tham gia lớp nào',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 6),
           Text(
             'Nhấn “Tham gia bằng mã” để vào lớp.',
@@ -459,7 +706,8 @@ class _CurrentClassCardModern extends StatelessWidget {
 
   String _formatVn(num v) {
     final s = v.toStringAsFixed(0);
-    return s.replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.');
+    return s.replaceAllMapped(
+        RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.');
   }
 
   @override
@@ -482,14 +730,18 @@ class _CurrentClassCardModern extends StatelessWidget {
         children: [
           Row(
             children: [
-              _AssetIconBox.square(asset: _kIcon.clazz, fallback: Icons.class_, size: 44),
+              _AssetIconBox.square(
+                  asset: _kIcon.clazz, fallback: Icons.class_, size: 44),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(className,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 2),
                     Text('Mã lớp: $classId',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -506,7 +758,10 @@ class _CurrentClassCardModern extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(.9),
+              color: Theme.of(context)
+                  .colorScheme
+                  .surfaceContainerHighest
+                  .withOpacity(.9),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Row(
@@ -517,7 +772,6 @@ class _CurrentClassCardModern extends StatelessWidget {
                   child: Text('Số dư hiện tại: $balanceText',
                       style: Theme.of(context).textTheme.titleMedium),
                 ),
-                // luôn hiện nút thành viên
                 IconButton(
                   tooltip: 'Thành viên lớp',
                   onPressed: onOpenMembers,
@@ -560,7 +814,8 @@ class _MiniCircleIcon extends StatelessWidget {
     final avatar = CircleAvatar(
       radius: 20,
       backgroundColor: bg,
-      child: _SafeAssetIcon(asset: asset, size: 22, fallback: Icons.account_balance),
+      child: _SafeAssetIcon(
+          asset: asset, size: 22, fallback: Icons.account_balance),
     );
     final ink = Material(
       type: MaterialType.transparency,
@@ -580,7 +835,10 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Text(title,
-        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800));
+        style: Theme.of(context)
+            .textTheme
+            .titleLarge
+            ?.copyWith(fontWeight: FontWeight.w800));
   }
 }
 
@@ -630,7 +888,6 @@ class _ActionSquareCard extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // icon nền vuông bo tròn (giống ảnh minh hoạ)
             Container(
               height: 70,
               width: 70,
@@ -639,7 +896,8 @@ class _ActionSquareCard extends StatelessWidget {
                 color: Theme.of(context).colorScheme.primaryContainer,
                 borderRadius: BorderRadius.circular(18),
               ),
-              child: _SafeAssetIcon(asset: assetIcon, size: 40, fallback: fallbackIcon),
+              child: _SafeAssetIcon(
+                  asset: assetIcon, size: 40, fallback: fallbackIcon),
             ),
             const SizedBox(height: 10),
             Text(
@@ -647,7 +905,10 @@ class _ActionSquareCard extends StatelessWidget {
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
             ),
             if (subtitle != null) ...[
               const SizedBox(height: 2),
@@ -687,13 +948,15 @@ class _AssetIconBox extends StatelessWidget {
     required String? asset,
     required IconData fallback,
     double size = 44,
-  }) => _AssetIconBox._(asset: asset, fallback: fallback, size: size, radius: 14);
+  }) =>
+      _AssetIconBox._(asset: asset, fallback: fallback, size: size, radius: 14);
 
   factory _AssetIconBox.square({
     required String? asset,
     required IconData fallback,
     double size = 44,
-  }) => _AssetIconBox._(asset: asset, fallback: fallback, size: size, radius: 12);
+  }) =>
+      _AssetIconBox._(asset: asset, fallback: fallback, size: size, radius: 12);
 
   @override
   Widget build(BuildContext context) {
@@ -702,7 +965,8 @@ class _AssetIconBox extends StatelessWidget {
       height: size,
       width: size,
       alignment: Alignment.center,
-      decoration: BoxDecoration(color: containerColor, borderRadius: BorderRadius.circular(radius)),
+      decoration: BoxDecoration(
+          color: containerColor, borderRadius: BorderRadius.circular(radius)),
       child: _SafeAssetIcon(asset: asset, size: size * .56, fallback: fallback),
     );
   }
@@ -712,7 +976,8 @@ class _SafeAssetIcon extends StatelessWidget {
   final String? asset;
   final IconData fallback;
   final double size;
-  const _SafeAssetIcon({required this.asset, required this.fallback, required this.size});
+  const _SafeAssetIcon(
+      {required this.asset, required this.fallback, required this.size});
 
   @override
   Widget build(BuildContext context) {
