@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 
 import '../repos/expense_repository.dart';
 import '../repos/fee_cycle_repository.dart';
+import '../repos/expense_comment_repository.dart';
 import '../services/api.dart';
 import '../services/session.dart';
 import '../services/network.dart';
@@ -66,7 +67,8 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
     if (path.startsWith('http://') || path.startsWith('https://')) return path;
 
     final base = ref.read(dioProvider).options.baseUrl; // vd http://10.0.2.2:8000/api
-    final host = base.endsWith('/api') ? base.substring(0, base.length - 4) : base;
+    final host =
+    base.endsWith('/api') ? base.substring(0, base.length - 4) : base;
 
     if (path.startsWith('/')) return '$host$path';
     return '$host/$path';
@@ -75,7 +77,8 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
   Future<void> _loadCycles(int classId) async {
     if (mounted) setState(() => _loadingCycles = true);
     try {
-      final list = await ref.read(feeCycleRepositoryProvider).listCycles(classId);
+      final list =
+      await ref.read(feeCycleRepositoryProvider).listCycles(classId);
       if (!mounted) return;
       setState(() => _cycles = list);
     } catch (_) {
@@ -113,10 +116,12 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
       );
 
       if (widget.feeCycleId != null && list.isEmpty) {
-        final all = await repo.listExpenses(classId: classId, cancelToken: _cancelToken);
+        final all =
+        await repo.listExpenses(classId: classId, cancelToken: _cancelToken);
         if (all.isNotEmpty && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Không có khoản chi thuộc kỳ đã chọn.')),
+            const SnackBar(
+                content: Text('Không có khoản chi thuộc kỳ đã chọn.')),
           );
         }
       }
@@ -139,10 +144,13 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
       });
       if (e.response?.statusCode == 401) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Phiên đã hết/thiếu token. Vui lòng đăng nhập lại.')),
+          const SnackBar(
+              content:
+              Text('Phiên đã hết/thiếu token. Vui lòng đăng nhập lại.')),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(msg)));
       }
     } catch (_) {
       if (!mounted) return;
@@ -160,11 +168,15 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
     final classId = _effectiveClassId();
 
     final formKey = GlobalKey<FormState>();
-    final titleCtl = TextEditingController(text: expense?['title']?.toString() ?? '');
-    final amountCtl = TextEditingController(text: expense?['amount']?.toString() ?? '');
-    final noteCtl = TextEditingController(text: expense?['note']?.toString() ?? '');
+    final titleCtl =
+    TextEditingController(text: expense?['title']?.toString() ?? '');
+    final amountCtl =
+    TextEditingController(text: expense?['amount']?.toString() ?? '');
+    final noteCtl =
+    TextEditingController(text: expense?['note']?.toString() ?? '');
 
-    int? selectedCycleId = expense?['fee_cycle_id'] as int? ?? widget.feeCycleId;
+    int? selectedCycleId =
+        expense?['fee_cycle_id'] as int? ?? widget.feeCycleId;
     DateTime? purchaseDate;
     XFile? pickedReceipt;
 
@@ -185,17 +197,22 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
                   TextFormField(
                     controller: titleCtl,
                     decoration: const InputDecoration(labelText: 'Tiêu đề'),
-                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Nhập tiêu đề' : null,
+                    validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Nhập tiêu đề' : null,
                   ),
                   const SizedBox(height: 8),
                   TextFormField(
                     controller: amountCtl,
-                    decoration: const InputDecoration(labelText: 'Số tiền (VND)'),
+                    decoration:
+                    const InputDecoration(labelText: 'Số tiền (VND)'),
                     keyboardType: TextInputType.number,
                     validator: (v) {
-                      final raw = (v ?? '').replaceAll(RegExp(r'[^0-9]'), '');
+                      final raw =
+                      (v ?? '').replaceAll(RegExp(r'[^0-9]'), '');
                       if (raw.isEmpty) return 'Nhập số tiền';
-                      if (int.tryParse(raw) == null) return 'Số tiền không hợp lệ';
+                      if (int.tryParse(raw) == null) {
+                        return 'Số tiền không hợp lệ';
+                      }
                       return null;
                     },
                   ),
@@ -222,11 +239,13 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
                           ..._cycles.map(
                                 (c) => DropdownMenuItem<int?>(
                               value: c['id'] as int,
-                              child: Text(c['name']?.toString() ?? 'Kỳ'),
+                              child:
+                              Text(c['name']?.toString() ?? 'Kỳ'),
                             ),
                           ),
                         ],
-                        onChanged: (v) => setLocal(() => selectedCycleId = v),
+                        onChanged: (v) =>
+                            setLocal(() => selectedCycleId = v),
                       ),
                     ),
                   ),
@@ -249,7 +268,9 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
                             firstDate: DateTime(now.year - 2),
                             lastDate: DateTime(now.year + 2),
                           );
-                          if (picked != null) setLocal(() => purchaseDate = picked);
+                          if (picked != null) {
+                            setLocal(() => purchaseDate = picked);
+                          }
                         },
                         icon: const Icon(Icons.event),
                         label: const Text('Chọn ngày'),
@@ -259,7 +280,8 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
                   const SizedBox(height: 8),
                   TextFormField(
                     controller: noteCtl,
-                    decoration: const InputDecoration(labelText: 'Ghi chú'),
+                    decoration:
+                    const InputDecoration(labelText: 'Ghi chú'),
                   ),
                   const SizedBox(height: 8),
                   Row(
@@ -290,10 +312,15 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Huỷ')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Huỷ'),
+            ),
             ElevatedButton(
               onPressed: () {
-                if (formKey.currentState!.validate()) Navigator.pop(ctx, true);
+                if (formKey.currentState!.validate()) {
+                  Navigator.pop(ctx, true);
+                }
               },
               child: const Text('Lưu'),
             ),
@@ -304,8 +331,10 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
 
     if (ok == true) {
       final repo = ref.read(expenseRepositoryProvider);
-      final amount = int.parse(amountCtl.text.replaceAll(RegExp(r'[^0-9]'), ''));
-      final extraNote = purchaseDate != null ? 'Ngày mua: ${_formatDate(purchaseDate!)}' : null;
+      final amount =
+      int.parse(amountCtl.text.replaceAll(RegExp(r'[^0-9]'), ''));
+      final extraNote =
+      purchaseDate != null ? 'Ngày mua: ${_formatDate(purchaseDate!)}' : null;
       final finalNote = [
         if ((noteCtl.text.trim().isNotEmpty)) noteCtl.text.trim(),
         if (extraNote != null) extraNote,
@@ -335,7 +364,9 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Đã lưu. Hãy mở menu "Tải biên nhận" để tải hoá đơn.'),
+                  content: Text(
+                    'Đã lưu. Hãy mở menu "Tải biên nhận" để tải hoá đơn.',
+                  ),
                 ),
               );
             }
@@ -361,7 +392,8 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
       } on DioException catch (e) {
         if (!mounted) return;
         final msg = prettyDioError(e);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(msg)));
       } catch (_) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -378,8 +410,14 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
         title: const Text('Xoá khoản chi'),
         content: const Text('Bạn có chắc chắn muốn xoá không?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Huỷ')),
-          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Xoá')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Huỷ'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Xoá'),
+          ),
         ],
       ),
     );
@@ -387,12 +425,16 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
 
     final repo = ref.read(expenseRepositoryProvider);
     try {
-      await repo.deleteExpense(classId: _effectiveClassId(), expenseId: id);
+      await repo.deleteExpense(
+        classId: _effectiveClassId(),
+        expenseId: id,
+      );
       if (mounted) _load();
     } on DioException catch (e) {
       if (!mounted) return;
       final msg = prettyDioError(e);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Lỗi xoá: $msg')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Lỗi xoá: $msg')));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -403,7 +445,8 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
 
   Future<void> _uploadReceipt(int expenseId) async {
     final picker = ImagePicker();
-    final file = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+    final file =
+    await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
     if (file == null) return;
 
     final repo = ref.read(expenseRepositoryProvider);
@@ -417,7 +460,8 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
     } on DioException catch (e) {
       if (!mounted) return;
       final msg = prettyDioError(e);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload lỗi: $msg')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Upload lỗi: $msg')));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -456,7 +500,10 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
             ? Center(
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Text(err!, style: const TextStyle(color: Colors.red)),
+            child: Text(
+              err!,
+              style: const TextStyle(color: Colors.red),
+            ),
           ),
         )
             : expenses.isEmpty
@@ -467,7 +514,8 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
             : RefreshIndicator(
           onRefresh: _load,
           child: ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            padding:
+            const EdgeInsets.fromLTRB(16, 12, 16, 24),
             itemCount: expenses.length,
             itemBuilder: (_, i) => _ExpenseTile(
               data: expenses[i],
@@ -475,13 +523,19 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
               fullUrl: _fullUrl,
               canManage: canManage,
               onEdit: () => _showForm(expense: expenses[i]),
-              onDelete: () => _deleteExpense(expenses[i]['id'] as int),
-              onUpload: () => _uploadReceipt(expenses[i]['id'] as int),
+              onDelete: () =>
+                  _deleteExpense(expenses[i]['id'] as int),
+              onUpload: () =>
+                  _uploadReceipt(expenses[i]['id'] as int),
             ),
           ),
         ),
-        floatingActionButton:
-        canManage ? FloatingActionButton(onPressed: () => _showForm(), child: const Icon(Icons.add)) : null,
+        floatingActionButton: canManage
+            ? FloatingActionButton(
+          onPressed: () => _showForm(),
+          child: const Icon(Icons.add),
+        )
+            : null,
       ),
     );
   }
@@ -493,7 +547,11 @@ class _GlassCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
   final double radius;
-  const _GlassCard({required this.child, this.padding = const EdgeInsets.all(16), this.radius = 16});
+  const _GlassCard({
+    required this.child,
+    this.padding = const EdgeInsets.all(16),
+    this.radius = 16,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -506,7 +564,10 @@ class _GlassCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: base,
             border: Border.all(
-              color: Theme.of(context).colorScheme.outlineVariant.withOpacity(.22),
+              color: Theme.of(context)
+                  .colorScheme
+                  .outlineVariant
+                  .withOpacity(.22),
             ),
             borderRadius: BorderRadius.circular(radius),
             boxShadow: [
@@ -735,7 +796,8 @@ class _InfoRow extends StatelessWidget {
             text,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color),
+            style:
+            Theme.of(context).textTheme.bodySmall?.copyWith(color: color),
           ),
         ),
       ],
@@ -743,7 +805,57 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
-/// Trang chi tiết khoản chi
+/// Chip thông tin nhỏ (kỳ, người tạo, ...)
+class _InfoChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _InfoChip({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer.withOpacity(.7),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: scheme.primary),
+          const SizedBox(width: 6),
+          Text(
+            '$label: ',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: scheme.primary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          Flexible(
+            child: Text(
+              value,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: scheme.onPrimaryContainer),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Trang chi tiết khoản chi (UI hiện đại + phần bình luận)
 class ExpenseDetailPage extends StatelessWidget {
   final Map<String, dynamic> expense;
   final String imageUrl;
@@ -768,68 +880,686 @@ class ExpenseDetailPage extends StatelessWidget {
     final note = (expense['note'] ?? '').toString();
     final who = (expense['created_by_name'] ?? '').toString();
     final cycle = (expense['cycle_name'] ?? '').toString();
+    final int expenseId = expense['id'] as int;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Khoản chi')),
-      body: ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          if (imageUrl.isNotEmpty) ...[
-            Hero(
-              tag: heroTag,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: AspectRatio(
-                  aspectRatio: 9 / 16,
-                  child: InteractiveViewer(
-                    panEnabled: true,
-                    minScale: 0.5,
-                    maxScale: 4,
-                    child: Image.network(
-                      imageUrl,
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(24),
-                          child: Text('Không tải được ảnh hóa đơn'),
+    final gradient =
+        Theme.of(context).extension<AppGradients>()?.background;
+
+    return Container(
+      decoration:
+      gradient == null ? null : BoxDecoration(gradient: gradient),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          scrolledUnderElevation: 0,
+          title: const Text('Chi tiết khoản chi'),
+        ),
+        body: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              // Ảnh hoá đơn
+              if (imageUrl.isNotEmpty) ...[
+                _GlassCard(
+                  radius: 18,
+                  padding: EdgeInsets.zero,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(18),
+                    child: Stack(
+                      children: [
+                        AspectRatio(
+                          aspectRatio: 9 / 16,
+                          child: InteractiveViewer(
+                            panEnabled: true,
+                            minScale: 0.5,
+                            maxScale: 4,
+                            child: Hero(
+                              tag: heroTag,
+                              child: Image.network(
+                                imageUrl,
+                                fit: BoxFit.contain,
+                                errorBuilder: (_, __, ___) =>
+                                const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(24),
+                                    child: Text(
+                                      'Không tải được ảnh hóa đơn',
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                        Positioned(
+                          left: 12,
+                          top: 12,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.4),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.receipt_long,
+                                  size: 16,
+                                  color: Colors.white,
+                                ),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Ảnh hoá đơn',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
+                const SizedBox(height: 16),
+              ],
+
+              // Thông tin chính
+              _GlassCard(
+                radius: 18,
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Thông tin khoản chi',
+                      style: Theme.of(context)
+                          .textTheme
+                          .labelLarge
+                          ?.copyWith(
+                        letterSpacing: 0.3,
+                        color:
+                        Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      title.isEmpty ? '(Chưa đặt tiêu đề)' : title,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Số tiền',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .outline,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      moneyStr(amountNum),
+                      style: Theme.of(context)
+                          .textTheme
+                          .headlineSmall
+                          ?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .primary,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // các chip nhỏ: kỳ, người tạo
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        if (cycle.isNotEmpty)
+                          _InfoChip(
+                            icon: Icons.event_note,
+                            label: 'Kỳ',
+                            value: cycle,
+                          ),
+                        if (who.isNotEmpty)
+                          _InfoChip(
+                            icon: Icons.person_outline,
+                            label: 'Người tạo',
+                            value: who,
+                          ),
+                      ],
+                    ),
+
+                    if (note.isNotEmpty) ...[
+                      const SizedBox(height: 18),
+                      Text(
+                        'Ghi chú',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .outline,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceVariant
+                              .withOpacity(.7),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          note,
+                          style:
+                          Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-          ],
-          _GlassCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+
+              const SizedBox(height: 16),
+
+              // ===== PHẦN BÌNH LUẬN =====
+              ExpenseCommentsSection(expenseId: expenseId),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Section bình luận dưới khoản chi
+class ExpenseCommentsSection extends ConsumerStatefulWidget {
+  final int expenseId;
+
+  const ExpenseCommentsSection({
+    super.key,
+    required this.expenseId,
+  });
+
+  @override
+  ConsumerState<ExpenseCommentsSection> createState() =>
+      _ExpenseCommentsSectionState();
+}
+
+class _ExpenseCommentsSectionState
+    extends ConsumerState<ExpenseCommentsSection> {
+  final TextEditingController _textCtl = TextEditingController();
+
+  bool _loading = false;
+  bool _sending = false;
+  String? _err;
+  List<Map<String, dynamic>> _comments = [];
+
+  // ảnh đính kèm (chỉ UI, chưa gửi lên server)
+  XFile? _attachedImage;
+
+  // đang trả lời comment nào
+  int? _replyToId;
+  String? _replyToName;
+
+  // like cục bộ (chưa sync server)
+  final Set<int> _likedLocal = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _textCtl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final sess = ref.read(sessionProvider);
+    final classId = sess.classId ?? 0;
+
+    if (classId <= 0) {
+      setState(() {
+        _err = 'Chưa chọn lớp — không thể tải bình luận';
+        _loading = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _err = null;
+    });
+
+    try {
+      final repo = ref.read(expenseCommentRepositoryProvider);
+      final list = await repo.listComments(
+        classId: classId,
+        expenseId: widget.expenseId,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _comments = list;
+        _loading = false;
+      });
+    } on DioException catch (e) {
+      if (!mounted) return;
+      final msg = prettyDioError(e);
+      setState(() {
+        _err = msg;
+        _loading = false;
+      });
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(msg)));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _err = 'Không tải được bình luận';
+        _loading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Không tải được bình luận')),
+      );
+    }
+  }
+
+  Future<void> _pickImage() async {
+    if (_sending) return;
+    final img = await ImagePicker()
+        .pickImage(source: ImageSource.gallery, imageQuality: 80);
+    if (!mounted) return;
+    setState(() => _attachedImage = img);
+  }
+
+  Future<void> _send() async {
+    final text = _textCtl.text.trim();
+    if (text.isEmpty || _sending) return;
+
+    final sess = ref.read(sessionProvider);
+    final classId = sess.classId ?? 0;
+
+    if (classId <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Chưa chọn lớp — không thể gửi bình luận'),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _sending = true);
+
+    try {
+      final repo = ref.read(expenseCommentRepositoryProvider);
+      // hiện tại API chỉ nhận text, chưa xử lý ảnh/replyTo
+      final created = await repo.createComment(
+        classId: classId,
+        expenseId: widget.expenseId,
+        body: text,
+      );
+
+      if (!mounted) return;
+
+      _textCtl.clear();
+      setState(() {
+        _comments.add(created);
+        _sending = false;
+        _attachedImage = null;
+        _replyToId = null;
+        _replyToName = null;
+      });
+    } on DioException catch (e) {
+      if (!mounted) return;
+      final msg = prettyDioError(e);
+      setState(() => _sending = false);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(msg)));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _sending = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gửi bình luận thất bại')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _GlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // header
+          Row(
+            children: [
+              const Icon(Icons.chat_bubble_outline, size: 18),
+              const SizedBox(width: 6),
+              const Text(
+                'Bình luận',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const Spacer(),
+              IconButton(
+                onPressed: _loading ? null : _load,
+                icon: const Icon(Icons.refresh, size: 18),
+                tooltip: 'Tải lại',
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // nội dung
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: LinearProgressIndicator(minHeight: 2),
+            )
+          else if (_err != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Text(
+                _err!,
+                style: const TextStyle(color: Colors.red),
+              ),
+            )
+          else if (_comments.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 4),
+                child: Text('Chưa có bình luận nào'),
+              )
+            else
+              Column(
+                children: _comments.map((c) {
+                  final userName = (c['user_name'] ?? '').toString();
+                  final body = (c['body'] ?? '').toString();
+                  final createdAt = (c['created_at'] ?? '').toString();
+                  final int? commentId = c['id'] is int ? c['id'] as int : null;
+                  final bool liked = commentId != null &&
+                      _likedLocal.contains(commentId);
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.person_outline, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // tên người bình luận (to + đậm)
+                              Text(
+                                userName.isEmpty ? 'Thành viên' : userName,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              // nội dung
+                              Text(
+                                body,
+                                style:
+                                Theme.of(context).textTheme.bodyMedium,
+                              ),
+                              const SizedBox(height: 4),
+                              // thời gian + like + trả lời
+                              Row(
+                                children: [
+                                  if (createdAt.isNotEmpty)
+                                    Text(
+                                      createdAt,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .outline,
+                                      ),
+                                    ),
+                                  const Spacer(),
+                                  if (commentId != null)
+                                    InkWell(
+                                      onTap: () {
+                                        setState(() {
+                                          if (liked) {
+                                            _likedLocal.remove(commentId);
+                                          } else {
+                                            _likedLocal.add(commentId);
+                                          }
+                                        });
+                                      },
+                                      child: Padding(
+                                        padding:
+                                        const EdgeInsets.symmetric(
+                                            horizontal: 4, vertical: 2),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              liked
+                                                  ? Icons.favorite
+                                                  : Icons.favorite_border,
+                                              size: 16,
+                                              color: liked
+                                                  ? Theme.of(context)
+                                                  .colorScheme
+                                                  .primary
+                                                  : Theme.of(context)
+                                                  .colorScheme
+                                                  .outline,
+                                            ),
+                                            const SizedBox(width: 2),
+                                            Text(
+                                              liked ? 'Đã thích' : 'Thích',
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodySmall
+                                                  ?.copyWith(
+                                                color: liked
+                                                    ? Theme.of(context)
+                                                    .colorScheme
+                                                    .primary
+                                                    : Theme.of(context)
+                                                    .colorScheme
+                                                    .outline,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  const SizedBox(width: 4),
+                                  InkWell(
+                                    onTap: () {
+                                      setState(() {
+                                        _replyToId = commentId;
+                                        _replyToName =
+                                        userName.isEmpty
+                                            ? 'Thành viên'
+                                            : userName;
+                                      });
+                                      // tự chèn @tên vào ô nhập nếu đang trống
+                                      if (_textCtl.text.isEmpty &&
+                                          _replyToName != null) {
+                                        _textCtl.text = '@$_replyToName ';
+                                        _textCtl.selection =
+                                            TextSelection.fromPosition(
+                                              TextPosition(
+                                                  offset: _textCtl.text.length),
+                                            );
+                                      }
+                                    },
+                                    child: Padding(
+                                      padding:
+                                      const EdgeInsets.symmetric(
+                                          horizontal: 4, vertical: 2),
+                                      child: Text(
+                                        'Trả lời',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+
+          const SizedBox(height: 8),
+          const Divider(height: 20),
+
+          // đang reply ai
+          if (_replyToId != null && _replyToName != null) ...[
+            Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  title.isEmpty ? '(Chưa đặt tiêu đề)' : title,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(fontWeight: FontWeight.w700),
+                Icon(
+                  Icons.reply,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.primary,
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(width: 4),
                 Text(
-                  moneyStr(amountNum),
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w700),
+                  'Đang trả lời $_replyToName',
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
-                const SizedBox(height: 12),
-                if (note.isNotEmpty) ...[
-                  const Text('Ghi chú:', style: TextStyle(fontWeight: FontWeight.w600)),
-                  Text(note),
-                  const SizedBox(height: 10),
-                ],
-                if (cycle.isNotEmpty) Text('Kỳ: $cycle'),
-                if (who.isNotEmpty) Text('Bởi: $who'),
+                const SizedBox(width: 4),
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _replyToId = null;
+                      _replyToName = null;
+                    });
+                  },
+                  child: const Icon(Icons.close, size: 16),
+                ),
               ],
             ),
+            const SizedBox(height: 8),
+          ],
+
+          // hiển thị file ảnh đã chọn (nếu có)
+          if (_attachedImage != null) ...[
+            Row(
+              children: [
+                const Icon(Icons.image, size: 16),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    _attachedImage!.name,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+                IconButton(
+                  onPressed: () {
+                    setState(() => _attachedImage = null);
+                  },
+                  icon: const Icon(Icons.close, size: 16),
+                  tooltip: 'Xoá hình',
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+          ],
+
+          // ô nhập bình luận + icon máy ảnh
+          Row(
+            children: [
+              IconButton(
+                onPressed: _sending ? null : _pickImage,
+                icon: const Icon(Icons.camera_alt_outlined),
+                tooltip: 'Chọn hình đính kèm',
+              ),
+              Expanded(
+                child: TextField(
+                  controller: _textCtl,
+                  decoration: InputDecoration(
+                    hintText: 'Nhập bình luận...',
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(999),
+                      borderSide: BorderSide(
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(999),
+                      borderSide: BorderSide(
+                        color:
+                        Theme.of(context).colorScheme.primary,
+                        width: 1.2,
+                      ),
+                    ),
+                    isDense: true,
+                  ),
+                  minLines: 1,
+                  maxLines: 3,
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: _sending ? null : _send,
+                icon: _sending
+                    ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+                    : const Icon(Icons.send),
+              ),
+            ],
           ),
         ],
       ),
