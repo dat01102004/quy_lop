@@ -14,11 +14,12 @@ StreamProvider<List<ConnectivityResult>>((ref) {
 final isOfflineProvider = Provider<bool>((ref) {
   final async = ref.watch(connectivityStreamProvider);
   return async.maybeWhen(
-    data: (list) => list.isEmpty ||
-        list.every((r) => r == ConnectivityResult.none),
+    data: (list) =>
+    list.isEmpty || list.every((r) => r == ConnectivityResult.none),
     orElse: () => false,
   );
 });
+
 
 /// Nhận diện DioException là lỗi offline
 bool isOfflineDioError(DioException e) {
@@ -35,9 +36,9 @@ String formatDateOnly(String? iso) {
   if (iso == null || iso.trim().isEmpty) return '-';
   try {
     final dt = DateTime.parse(iso).toLocal();
-    return DateFormat('yyyy-MM-dd').format(dt); // 2025-10-15
+    return DateFormat('yyyy-MM-dd').format(dt);
   } catch (_) {
-    return iso.split('T').first; // fallback cắt phần sau 'T'
+    return iso.split('T').first;
   }
 }
 
@@ -45,11 +46,12 @@ String formatDateTime(String? iso) {
   if (iso == null || iso.trim().isEmpty) return '-';
   try {
     final dt = DateTime.parse(iso).toLocal();
-    return DateFormat('yyyy-MM-dd HH:mm').format(dt); // 2025-10-15 08:30
+    return DateFormat('yyyy-MM-dd HH:mm').format(dt);
   } catch (_) {
-    return iso.replaceFirst('T', ' ').split('.').first; // fallback
+    return iso.replaceFirst('T', ' ').split('.').first;
   }
 }
+
 /// Chuyển DioException -> message thân thiện
 String prettyDioError(DioException e) {
   if (isOfflineDioError(e)) {

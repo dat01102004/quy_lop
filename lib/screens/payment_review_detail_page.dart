@@ -1,17 +1,17 @@
 // lib/screens/payment_review_detail_page.dart
 import 'dart:ui';
 
+import 'package:quylop/services/api.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
-import '../services/session.dart';
-import '../services/api.dart';
-import '../repos/payment_repository.dart';
 import '../repos/payment_comment_repository.dart';
+import '../repos/payment_repository.dart';
 import '../services/network.dart';
+import '../services/session.dart';
 import '../theme/app_theme.dart';
 
 class PaymentReviewDetailPage extends ConsumerStatefulWidget {
@@ -97,10 +97,13 @@ class _PaymentReviewDetailPageState
       );
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content:
-        Text(approve ? 'Đã xác nhận thanh toán' : 'Đã từ chối thanh toán'),
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            approve ? 'Đã xác nhận thanh toán' : 'Đã từ chối thanh toán',
+          ),
+        ),
+      );
       Navigator.of(context).pop(true);
     } on DioException catch (e) {
       final msg = prettyDioError(e);
@@ -123,7 +126,7 @@ class _PaymentReviewDetailPageState
     if (proofPath.startsWith('http://') || proofPath.startsWith('https://')) {
       return proofPath;
     }
-    final base = ref.read(dioProvider).options.baseUrl; // http://x/api
+    final base = ref.read(dioProvider).options.baseUrl;
     final host =
     base.endsWith('/api') ? base.substring(0, base.length - 4) : base;
     if (proofPath.startsWith('/')) return '$host$proofPath';
@@ -153,8 +156,7 @@ class _PaymentReviewDetailPageState
     }
 
     final d = data ?? {};
-    final payer =
-        (d['payer_name'] ?? d['user_name'] ?? '') as String? ?? '';
+    final payer = (d['payer_name'] ?? d['user_name'] ?? '') as String? ?? '';
     final num amountNum = d['amount'] is num
         ? d['amount'] as num
         : int.tryParse('${d['amount']}') ?? 0;
@@ -167,7 +169,6 @@ class _PaymentReviewDetailPageState
     final cycleName = (d['cycle_name'] ?? '').toString();
 
     final canReview = !(status == 'verified' || status == 'invalid');
-
     final proofHeroTag = 'proof_${widget.paymentId}';
 
     return Container(
@@ -213,8 +214,6 @@ class _PaymentReviewDetailPageState
               Text(err!, style: const TextStyle(color: Colors.red)),
               const SizedBox(height: 12),
             ],
-
-            // ===== Header card =====
             _GlassCard(
               child: Row(
                 children: [
@@ -255,8 +254,6 @@ class _PaymentReviewDetailPageState
               ),
             ),
             const SizedBox(height: 12),
-
-            // ===== Meta card =====
             _GlassCard(
               child: Wrap(
                 spacing: 8,
@@ -264,8 +261,9 @@ class _PaymentReviewDetailPageState
                 children: [
                   if (invoiceId != null)
                     _MetaChip(
-                        icon: Icons.receipt_long_outlined,
-                        text: 'Invoice #$invoiceId'),
+                      icon: Icons.receipt_long_outlined,
+                      text: 'Invoice #$invoiceId',
+                    ),
                   if (cycleName.isNotEmpty)
                     _MetaChip(icon: Icons.event, text: cycleName),
                   if (method.isNotEmpty)
@@ -274,14 +272,13 @@ class _PaymentReviewDetailPageState
                     _MetaChip(icon: Icons.access_time, text: createdAt),
                   if (verifiedBy.isNotEmpty)
                     _MetaChip(
-                        icon: Icons.verified_user_outlined,
-                        text: 'Duyệt: $verifiedBy'),
+                      icon: Icons.verified_user_outlined,
+                      text: 'Duyệt: $verifiedBy',
+                    ),
                 ],
               ),
             ),
             const SizedBox(height: 12),
-
-            // ===== Proof card =====
             if (proofUrl.isNotEmpty)
               _GlassCard(
                 child: Column(
@@ -309,8 +306,7 @@ class _PaymentReviewDetailPageState
                             fit: BoxFit.cover,
                             errorBuilder: (_, __, ___) => const Padding(
                               padding: EdgeInsets.all(12),
-                              child:
-                              Text('Không tải được ảnh minh chứng'),
+                              child: Text('Không tải được ảnh minh chứng'),
                             ),
                           ),
                         ),
@@ -319,10 +315,7 @@ class _PaymentReviewDetailPageState
                   ],
                 ),
               ),
-
             const SizedBox(height: 12),
-
-            // ===== Note card =====
             _GlassCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -339,18 +332,14 @@ class _PaymentReviewDetailPageState
                     controller: _noteCtl,
                     maxLines: 3,
                     decoration: const InputDecoration(
-                      hintText:
-                      'Ví dụ: kiểm tra giao dịch, khớp nội dung...',
+                      hintText: 'Ví dụ: kiểm tra giao dịch, khớp nội dung...',
                       border: OutlineInputBorder(),
                     ),
                   ),
                 ],
               ),
             ),
-
             const SizedBox(height: 12),
-
-            // ===== BÌNH LUẬN KHOẢN THU =====
             PaymentCommentsSection(paymentId: widget.paymentId),
           ],
         ),
@@ -359,7 +348,6 @@ class _PaymentReviewDetailPageState
   }
 }
 
-/// ========== SECTION BÌNH LUẬN KHOẢN THU ==========
 class PaymentCommentsSection extends ConsumerStatefulWidget {
   final int paymentId;
 
@@ -377,12 +365,11 @@ class _PaymentCommentsSectionState
   bool _loading = false;
   bool _sending = false;
   String? _err;
-  List<Map<String, dynamic>> _comments = [];
+  List<_CommentNode> _comments = [];
 
   XFile? _attachedImage;
   int? _replyToId;
   String? _replyToName;
-  final Set<int> _likedLocal = {};
 
   @override
   void initState() {
@@ -419,11 +406,12 @@ class _PaymentCommentsSectionState
         classId: classId,
         paymentId: widget.paymentId,
       );
+      debugPrint('COMMENTS RAW: $list');
 
       if (!mounted) return;
 
       setState(() {
-        _comments = list;
+        _comments = _CommentNode.buildTree(list);
         _loading = false;
       });
     } on DioException catch (e) {
@@ -475,17 +463,35 @@ class _PaymentCommentsSectionState
 
     try {
       final repo = ref.read(paymentCommentRepositoryProvider);
+      final parentId = _replyToId;
       final created = await repo.createComment(
         classId: classId,
         paymentId: widget.paymentId,
         body: text,
+        parentId: parentId,
       );
 
       if (!mounted) return;
 
+      final normalized = Map<String, dynamic>.from(created);
+      normalized.putIfAbsent('parent_id', () => parentId);
+      if ((normalized['user_name'] ?? '').toString().isEmpty) {
+        normalized['user_name'] = sess.name ?? 'Bạn';
+      }
+      if ((normalized['body'] ?? '').toString().isEmpty) {
+        normalized['body'] = text;
+      }
+      if ((normalized['created_at'] ?? '').toString().isEmpty) {
+        normalized['created_at'] = DateTime.now().toString();
+      }
+
+      final updated = [..._CommentNode.flatten(_comments), _CommentNode.fromMap(normalized)];
+
       _textCtl.clear();
       setState(() {
-        _comments.add(created);
+        _comments = _CommentNode.buildTree(
+          updated.map((e) => e.toMap()).toList(),
+        );
         _sending = false;
         _attachedImage = null;
         _replyToId = null;
@@ -506,6 +512,85 @@ class _PaymentCommentsSectionState
     }
   }
 
+  Future<void> _toggleLike(_CommentNode comment) async {
+    final sess = ref.read(sessionProvider);
+    final classId = sess.classId ?? 0;
+    if (classId <= 0 || comment.id == null) return;
+
+    final previous = comment.clone();
+    final nextLiked = !comment.isLiked;
+    setState(() {
+      comment.isLiked = nextLiked;
+      if (nextLiked) {
+        if (!comment.likedUserNames.contains(comment.currentViewerName)) {
+          comment.likedUserNames = [
+            ...comment.likedUserNames,
+            comment.currentViewerName,
+          ];
+        }
+      } else {
+        comment.likedUserNames = comment.likedUserNames
+            .where((name) => name != comment.currentViewerName)
+            .toList();
+      }
+      comment.likeCount = comment.likedUserNames.length > comment.likeCount
+          ? comment.likedUserNames.length
+          : (nextLiked
+          ? comment.likeCount + 1
+          : (comment.likeCount > 0 ? comment.likeCount - 1 : 0));
+    });
+
+    try {
+      final payload = await ref.read(paymentCommentRepositoryProvider).setLike(
+        classId: classId,
+        paymentId: widget.paymentId,
+        commentId: comment.id!,
+        like: nextLiked,
+      );
+      if (!mounted) return;
+      setState(() {
+        comment.applyLikePayload(payload, fallbackLiked: nextLiked);
+      });
+    } on DioException catch (_) {
+      if (!mounted) return;
+      setState(() {
+        comment.restoreFrom(previous);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'API like chưa khớp backend. Frontend đã sẵn sàng, cần map đúng endpoint ở server.',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        comment.restoreFrom(previous);
+      });
+    }
+  }
+
+  void _startReply(_CommentNode comment) {
+    final name = comment.userName.isEmpty ? 'Thành viên' : comment.userName;
+    setState(() {
+      _replyToId = comment.id;
+      _replyToName = name;
+    });
+    if (_textCtl.text.trim().isEmpty) {
+      _textCtl.text = '@$name ';
+      _textCtl.selection =
+          TextSelection.collapsed(offset: _textCtl.text.length);
+    }
+  }
+
+  void _cancelReply() {
+    setState(() {
+      _replyToId = null;
+      _replyToName = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -514,7 +599,6 @@ class _PaymentCommentsSectionState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // header
           Row(
             children: [
               const Icon(Icons.chat_bubble_outline, size: 18),
@@ -551,171 +635,81 @@ class _PaymentCommentsSectionState
               )
             else
               Column(
-                children: _comments.map((c) {
-                  final userName = (c['user_name'] ?? '').toString();
-                  final body = (c['body'] ?? '').toString();
-                  final createdAt = (c['created_at'] ?? '').toString();
-                  final int? commentId =
-                  c['id'] is int ? c['id'] as int : null;
-                  final bool liked =
-                      commentId != null && _likedLocal.contains(commentId);
-
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 8, bottom: 6),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(Icons.person_outline, size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(
+                children: _comments
+                    .map(
+                      (comment) => _CommentTile(
+                    comment: comment,
+                    level: 0,
+                    onLike: _toggleLike,
+                    onReply: _startReply,
+                    onShowLikedUsers: (comment) {
+                      if (comment.likedUserNames.isEmpty) return;
+                      showModalBottomSheet<void>(
+                        context: context,
+                        builder: (_) => SafeArea(
                           child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              // tên to hơn
-                              // ===== NAME =====
+                              const SizedBox(height: 12),
                               Text(
-                                userName.isEmpty ? 'Thành viên' : userName,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                ),
+                                'Đã thích',
+                                style: theme.textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700),
                               ),
-
-                              const SizedBox(height: 6),
-
-// ===== BODY (THỤT VÀO + BUBBLE) =====
-                              Padding(
-                                padding: const EdgeInsets.only(left: 16),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 10,
+                              const SizedBox(height: 8),
+                              Flexible(
+                                child: ListView.separated(
+                                  shrinkWrap: true,
+                                  itemCount: comment.likedUserNames.length,
+                                  separatorBuilder: (_, __) => const Divider(
+                                    height: 1,
                                   ),
-                                  decoration: BoxDecoration(
-                                    color: theme.colorScheme.surfaceContainerHighest,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    body,
-                                    style: theme.textTheme.bodyMedium,
+                                  itemBuilder: (_, index) => ListTile(
+                                    leading: const Icon(Icons.favorite),
+                                    title: Text(comment.likedUserNames[index]),
                                   ),
                                 ),
-                              ),
-
-                              const SizedBox(height: 6),
-
-// ===== TIME + ACTION =====
-                              Row(
-                                children: [
-                                  if (createdAt.isNotEmpty)
-                                    Text(
-                                      createdAt,
-                                      style: theme.textTheme.bodySmall?.copyWith(
-                                        color: theme.colorScheme.outline,
-                                      ),
-                                    ),
-                                  const Spacer(),
-
-                                  if (commentId != null)
-                                    InkWell(
-                                      onTap: () {
-                                        setState(() {
-                                          if (liked) {
-                                            _likedLocal.remove(commentId);
-                                          } else {
-                                            _likedLocal.add(commentId);
-                                          }
-                                        });
-                                      },
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            liked ? Icons.favorite : Icons.favorite_border,
-                                            size: 16,
-                                            color: liked
-                                                ? theme.colorScheme.primary
-                                                : theme.colorScheme.outline,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            liked ? 'Đã thích' : 'Thích',
-                                            style: theme.textTheme.bodySmall?.copyWith(
-                                              color: liked
-                                                  ? theme.colorScheme.primary
-                                                  : theme.colorScheme.outline,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-
-                                  const SizedBox(width: 12),
-
-                                  InkWell(
-                                    onTap: () {
-                                      setState(() {
-                                        _replyToId = commentId;
-                                        _replyToName =
-                                        userName.isEmpty ? 'Thành viên' : userName;
-                                      });
-
-                                      if (_textCtl.text.isEmpty &&
-                                          _replyToName != null) {
-                                        _textCtl.text = '@$_replyToName ';
-                                        _textCtl.selection = TextSelection.fromPosition(
-                                          TextPosition(offset: _textCtl.text.length),
-                                        );
-                                      }
-                                    },
-                                    child: Text(
-                                      'Trả lời',
-                                      style: theme.textTheme.bodySmall?.copyWith(
-                                        color: theme.colorScheme.primary,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                ],
                               ),
                             ],
                           ),
                         ),
-                      ],
-                    ),
-                  );
-                }).toList(),
+                      );
+                    },
+                  ),
+                )
+                    .toList(),
               ),
           const SizedBox(height: 8),
-
           if (_replyToId != null && _replyToName != null) ...[
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.reply,
-                  size: 16,
-                  color: theme.colorScheme.primary,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  'Đang trả lời $_replyToName',
-                  style: theme.textTheme.bodySmall,
-                ),
-                const SizedBox(width: 4),
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _replyToId = null;
-                      _replyToName = null;
-                    });
-                  },
-                  child: const Icon(Icons.close, size: 16),
-                ),
-              ],
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer.withOpacity(.55),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.reply,
+                    size: 16,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Đang trả lời $_replyToName',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: _cancelReply,
+                    child: const Icon(Icons.close, size: 16),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 8),
           ],
-
           if (_attachedImage != null) ...[
             Row(
               children: [
@@ -736,8 +730,6 @@ class _PaymentCommentsSectionState
             ),
             const SizedBox(height: 8),
           ],
-
-          // input + camera
           Row(
             children: [
               IconButton(
@@ -748,7 +740,9 @@ class _PaymentCommentsSectionState
                 child: TextField(
                   controller: _textCtl,
                   decoration: InputDecoration(
-                    hintText: 'Nhập bình luận...',
+                    hintText: _replyToName == null
+                        ? 'Nhập bình luận...'
+                        : 'Trả lời $_replyToName...',
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 14,
                       vertical: 10,
@@ -793,7 +787,363 @@ class _PaymentCommentsSectionState
   }
 }
 
-/// ====== Small UI helpers ======
+class _CommentTile extends StatelessWidget {
+  final _CommentNode comment;
+  final int level;
+  final ValueChanged<_CommentNode> onLike;
+  final ValueChanged<_CommentNode> onReply;
+  final ValueChanged<_CommentNode> onShowLikedUsers;
+
+  const _CommentTile({
+    required this.comment,
+    required this.level,
+    required this.onLike,
+    required this.onReply,
+    required this.onShowLikedUsers,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final indent = level * 22.0;
+    final isReply = level > 0;
+    final likedLabel = comment.likeCount > 0
+        ? '${comment.likeCount} lượt thích'
+        : (comment.isLiked ? 'Đã thích' : 'Thích');
+
+    return Padding(
+      padding: EdgeInsets.only(left: indent, top: 10, bottom: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: isReply ? 14 : 16,
+                backgroundColor: theme.colorScheme.primaryContainer,
+                child: Icon(
+                  Icons.person_outline,
+                  size: isReply ? 14 : 16,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isReply
+                        ? theme.colorScheme.surfaceContainerHighest
+                        .withOpacity(.55)
+                        : theme.colorScheme.surfaceContainerHighest
+                        .withOpacity(.78),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: theme.colorScheme.outlineVariant.withOpacity(.24),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              comment.userName,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          if (comment.parentDisplayName != null)
+                            Text(
+                              'trả lời @${comment.parentDisplayName}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(comment.body, style: theme.textTheme.bodyMedium),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 42, top: 4),
+            child: Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 10,
+              runSpacing: 4,
+              children: [
+                if (comment.createdAt.isNotEmpty)
+                  Text(
+                    comment.createdAt,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
+                  ),
+                InkWell(
+                  onTap: () => onLike(comment),
+                  borderRadius: BorderRadius.circular(999),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        comment.isLiked
+                            ? Icons.favorite
+                            : Icons.favorite_border,
+                        size: 16,
+                        color: comment.isLiked
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.outline,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        likedLabel,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: comment.isLiked
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.outline,
+                          fontWeight:
+                          comment.isLiked ? FontWeight.w700 : FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                InkWell(
+                  onTap: () => onReply(comment),
+                  child: Text(
+                    'Trả lời',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                if (comment.likedUserNames.isNotEmpty)
+                  InkWell(
+                    onTap: () => onShowLikedUsers(comment),
+                    child: Text(
+                      'Ai đã thích',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.primary,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          ...comment.replies.map(
+                (reply) => _CommentTile(
+              comment: reply,
+              level: level + 1,
+              onLike: onLike,
+              onReply: onReply,
+              onShowLikedUsers: onShowLikedUsers,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CommentNode {
+  int? id;
+  final int? parentId;
+  final String userName;
+  final String body;
+  final String createdAt;
+  bool isLiked;
+  int likeCount;
+  List<String> likedUserNames;
+  final String? parentDisplayName;
+  final String currentViewerName;
+  final List<_CommentNode> replies;
+
+  _CommentNode({
+    required this.id,
+    required this.parentId,
+    required this.userName,
+    required this.body,
+    required this.createdAt,
+    required this.isLiked,
+    required this.likeCount,
+    required this.likedUserNames,
+    required this.parentDisplayName,
+    required this.currentViewerName,
+    List<_CommentNode>? replies,
+  }) : replies = replies ?? [];
+
+  factory _CommentNode.fromMap(Map<String, dynamic> map) {
+    final likedUsers = _extractLikedUsers(map);
+    final likeCount = _extractLikeCount(map, likedUsers.length);
+    return _CommentNode(
+      id: _asInt(map['id']),
+      parentId: _extractParentId(map),
+      userName: ((map['user_name'] ?? map['name'] ?? 'Thành viên') as Object)
+          .toString(),
+      body: (map['body'] ?? '').toString(),
+      createdAt: (map['created_at'] ?? '').toString(),
+      isLiked: _extractIsLiked(map),
+      likeCount: likeCount,
+      likedUserNames: likedUsers,
+      parentDisplayName: _extractParentDisplayName(map),
+      currentViewerName:
+      (map['current_user_name'] ?? map['viewer_name'] ?? 'Bạn').toString(),
+    );
+  }
+
+  static List<_CommentNode> buildTree(List<Map<String, dynamic>> raw) {
+    final nodes = raw.map(_CommentNode.fromMap).toList();
+    final byId = <int, _CommentNode>{
+      for (final node in nodes)
+        if (node.id != null) node.id!: node,
+    };
+
+    for (final node in nodes) {
+      node.replies.clear();
+    }
+
+    final roots = <_CommentNode>[];
+    for (final node in nodes) {
+      final parent = node.parentId == null ? null : byId[node.parentId!];
+      if (parent == null) {
+        roots.add(node);
+      } else {
+        parent.replies.add(node);
+      }
+    }
+
+    roots.sort(_sortNodes);
+    for (final node in roots) {
+      _sortDeep(node.replies);
+    }
+    return roots;
+  }
+
+  static List<_CommentNode> flatten(List<_CommentNode> nodes) {
+    final result = <_CommentNode>[];
+    for (final node in nodes) {
+      result.add(node);
+      result.addAll(flatten(node.replies));
+    }
+    return result;
+  }
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'parent_id': parentId,
+    'user_name': userName,
+    'body': body,
+    'created_at': createdAt,
+    'is_liked': isLiked,
+    'like_count': likeCount,
+    'liked_users': likedUserNames,
+    'reply_to_name': parentDisplayName,
+    'current_user_name': currentViewerName,
+  };
+
+  _CommentNode clone() => _CommentNode(
+    id: id,
+    parentId: parentId,
+    userName: userName,
+    body: body,
+    createdAt: createdAt,
+    isLiked: isLiked,
+    likeCount: likeCount,
+    likedUserNames: [...likedUserNames],
+    parentDisplayName: parentDisplayName,
+    currentViewerName: currentViewerName,
+    replies: replies.map((e) => e.clone()).toList(),
+  );
+
+  void restoreFrom(_CommentNode other) {
+    isLiked = other.isLiked;
+    likeCount = other.likeCount;
+    likedUserNames = [...other.likedUserNames];
+  }
+
+  void applyLikePayload(Map<String, dynamic> payload, {required bool fallbackLiked}) {
+    final likedUsers = _extractLikedUsers(payload);
+    if (likedUsers.isNotEmpty) {
+      likedUserNames = likedUsers;
+    }
+    final nextLikeCount = _extractLikeCount(payload, likedUserNames.length);
+    likeCount = nextLikeCount > 0 ? nextLikeCount : likedUserNames.length;
+    if (payload.isNotEmpty) {
+      isLiked = _extractIsLiked(payload);
+    } else {
+      isLiked = fallbackLiked;
+    }
+  }
+
+  static void _sortDeep(List<_CommentNode> nodes) {
+    nodes.sort(_sortNodes);
+    for (final node in nodes) {
+      _sortDeep(node.replies);
+    }
+  }
+
+  static int _sortNodes(_CommentNode a, _CommentNode b) {
+    final aId = a.id ?? 0;
+    final bId = b.id ?? 0;
+    return aId.compareTo(bId);
+  }
+
+  static int? _extractParentId(Map<String, dynamic> map) {
+    return _asInt(
+      map['parent_id'] ?? map['reply_to_id'] ?? map['parent_comment_id'],
+    );
+  }
+
+  static String? _extractParentDisplayName(Map<String, dynamic> map) {
+    final value = map['reply_to_name'] ?? map['parent_user_name'];
+    if (value == null) return null;
+    final text = value.toString().trim();
+    return text.isEmpty ? null : text;
+  }
+
+  static List<String> _extractLikedUsers(Map<String, dynamic> map) {
+    final raw = map['liked_users'] ?? map['likers'] ?? map['likes'];
+    if (raw is! List) return <String>[];
+    return raw.map((item) {
+      if (item is Map) {
+        return (item['name'] ?? item['user_name'] ?? item['full_name'] ?? '')
+            .toString();
+      }
+      return item.toString();
+    }).where((e) => e.trim().isNotEmpty).toList();
+  }
+
+  static int _extractLikeCount(Map<String, dynamic> map, int fallback) {
+    return _asInt(map['like_count'] ?? map['likes_count'] ?? map['likes']) ??
+        fallback;
+  }
+
+  static bool _extractIsLiked(Map<String, dynamic> map) {
+    final value = map['is_liked'] ?? map['liked'] ?? map['viewer_liked'];
+    if (value is bool) return value;
+    return value.toString() == '1' || value.toString().toLowerCase() == 'true';
+  }
+
+  static int? _asInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '');
+  }
+}
 
 class _StatusChip extends StatelessWidget {
   final String status;
@@ -802,7 +1152,9 @@ class _StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = status.toLowerCase();
-    Color bg, fg, br;
+    Color bg;
+    Color fg;
+    Color br;
     switch (s) {
       case 'verified':
       case 'paid':
@@ -865,7 +1217,10 @@ class _MetaChip extends StatelessWidget {
 class _GlassCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
-  const _GlassCard({required this.child, this.padding = const EdgeInsets.all(16)});
+  const _GlassCard({
+    required this.child,
+    this.padding = const EdgeInsets.all(16),
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -900,7 +1255,6 @@ class _GlassCard extends StatelessWidget {
   }
 }
 
-// ======= Full-screen image viewer =======
 class _FullImageScreen extends StatelessWidget {
   final String imageUrl;
   final String heroTag;
@@ -913,8 +1267,10 @@ class _FullImageScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.black,
         iconTheme: const IconThemeData(color: Colors.white),
-        title: const Text('Ảnh minh chứng',
-            style: TextStyle(color: Colors.white)),
+        title: const Text(
+          'Ảnh minh chứng',
+          style: TextStyle(color: Colors.white),
+        ),
       ),
       body: Center(
         child: Hero(
@@ -927,8 +1283,10 @@ class _FullImageScreen extends StatelessWidget {
               fit: BoxFit.contain,
               errorBuilder: (_, __, ___) => const Padding(
                 padding: EdgeInsets.all(24),
-                child: Text('Không tải được ảnh',
-                    style: TextStyle(color: Colors.white)),
+                child: Text(
+                  'Không tải được ảnh',
+                  style: TextStyle(color: Colors.white),
+                ),
               ),
             ),
           ),
