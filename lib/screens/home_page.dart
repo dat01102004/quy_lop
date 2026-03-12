@@ -10,12 +10,14 @@ import '../repos/class_repository.dart';
 import '../repos/fund_account_repository.dart';
 import '../services/session.dart';
 import '../services/network.dart';        // prettyDioError
-import '../services/dio_provider.dart';   // dioProvider (nếu bạn đang dùng)
+import '../services/dio_provider.dart';   // dioProvider
+import '../providers/unread_notification_provider.dart';
 
 import 'profile/profile_page.dart';
 import 'class_list_page.dart';
 import 'class_members_page.dart';
 import 'profile/fund_account_sheet.dart';
+import '../providers/fund_notification_providers.dart';
 
 /// ================== UI CONFIG (đúng tên icon trong assets/icon) ==================
 const _kIcon = (
@@ -36,11 +38,13 @@ const List<String> _kFundAccountMiniIcons = [
 ];
 
 /// ====== Model thông báo rất gọn ======
+/// ====== Model thông báo rất gọn (khớp bảng notifications) ======
 class _Notif {
-  final String id;
-  final String type; // 'income' | 'expense'
+  final int id;
+  final String type;   // due_reminder | income | expense | expense_comment...
   final String title;
-  final int amount; // VND
+  final String body;   // nội dung chi tiết (cột body)
+  final int amount;    // lấy từ cột amount nếu có, hoặc parse từ body
   final DateTime createdAt;
   bool read;
 
@@ -48,20 +52,49 @@ class _Notif {
     required this.id,
     required this.type,
     required this.title,
+    required this.body,
     required this.amount,
     required this.createdAt,
     this.read = false,
   });
 
-  factory _Notif.fromJson(Map<String, dynamic> j) => _Notif(
-    id: (j['id'] ?? '').toString(),
-    type: (j['type'] ?? 'income').toString(),
-    title: (j['title'] ?? '').toString(),
-    amount: _toInt(j['amount']),
-    createdAt: DateTime.tryParse((j['created_at'] ?? '').toString()) ??
-        DateTime.now(),
-    read: (j['read'] ?? false) == true,
-  );
+  factory _Notif.fromJson(Map<String, dynamic> j) {
+    int amount = _toInt(j['amount']); // nếu bảng không có amount -> sẽ là 0
+
+    // Nếu amount = 0 thì thử parse trong body kiểu: "Số tiền: 100000 - Hạn: ..."
+    final body = (j['body'] ?? '').toString();
+    if (amount == 0 && body.isNotEmpty) {
+      final m = RegExp(r'Số tiền:\s*([0-9]+)').firstMatch(body);
+      if (m != null) {
+        amount = int.tryParse(m.group(1)!) ?? 0;
+      }
+    }
+
+    final createdRaw = (j['sent_at'] ?? j['created_at'] ?? '').toString();
+    DateTime created;
+    try {
+      created = DateTime.parse(createdRaw).toLocal();
+    } catch (_) {
+      created = DateTime.now();
+    }
+
+    final isReadRaw = j['is_read'] ?? j['read'] ?? 0;
+    final isRead = switch (isReadRaw) {
+      bool b => b,
+      num n => n != 0,
+      _ => isReadRaw.toString() == '1',
+    };
+
+    return _Notif(
+      id: _toInt(j['id']),
+      type: (j['type'] ?? '').toString(),
+      title: (j['title'] ?? '').toString(),
+      body: body,
+      amount: amount,
+      createdAt: created,
+      read: isRead,
+    );
+  }
 
   static int _toInt(dynamic v) {
     if (v is int) return v;
@@ -69,6 +102,7 @@ class _Notif {
     return int.tryParse(v?.toString() ?? '') ?? 0;
   }
 }
+
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -84,7 +118,6 @@ class _HomePageState extends ConsumerState<HomePage> {
   num? _balance;
 
   // ====== state thông báo
-  final _money = NumberFormat.decimalPattern('vi_VN');
   List<_Notif> _notifs = const [];
   bool get _hasUnread => _notifs.any((n) => !n.read);
 
@@ -113,8 +146,9 @@ class _HomePageState extends ConsumerState<HomePage> {
           final classIdAny = (picked['id'] ?? picked['class_id']);
           final role = (picked['role'] ?? 'member').toString();
           if (classIdAny != null) {
-            final idInt =
-            classIdAny is int ? classIdAny : int.tryParse(classIdAny.toString());
+            final idInt = classIdAny is int
+                ? classIdAny
+                : int.tryParse(classIdAny.toString());
             if (idInt != null) {
               await ref.read(sessionProvider.notifier).setClass(idInt);
               await ref.read(sessionProvider.notifier).setRole(role);
@@ -176,8 +210,10 @@ class _HomePageState extends ConsumerState<HomePage> {
 
       if (_className == null) {
         final classes = await ref.read(classRepositoryProvider).myClasses();
-        final hit =
-        classes.firstWhere((c) => (c['id'] == s.classId), orElse: () => {});
+        final hit = classes.firstWhere(
+              (c) => (c['id'] == s.classId),
+          orElse: () => {},
+        );
         if (hit.isNotEmpty) {
           setState(() => _className = (hit['name'] ?? '').toString());
         }
@@ -186,33 +222,39 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   /// ====== LOAD thông báo thu/chi
+  /// ====== LOAD thông báo (dùng FundNotificationRepository) ======
   Future<void> _loadNotifications() async {
-    final s = ref.read(sessionProvider);
-    if (s.classId == null) return;
-
     try {
-      final dio = ref.read(dioProvider);
-      // ĐỔI endpoint cho khớp BE của bạn
-      final res = await dio.get(
-        '/classes/${s.classId}/notifications',
-        queryParameters: {'limit': 20},
-      );
-      final List list = res.data is List ? (res.data as List) : [];
+      final repo = ref.read(fundNotificationRepositoryProvider);
+      final list = await repo.getNotifications(page: 1);
+      if (!mounted) return;
+
       final items = list
           .map((e) => _Notif.fromJson(Map<String, dynamic>.from(e)))
           .toList();
-      if (!mounted) return;
+
       setState(() => _notifs = items);
+      // _hasUnread dùng _notifs để hiện chấm đỏ ở icon chuông
     } catch (_) {
-      // Fallback dữ liệu mẫu cho UI (không crash)
-      final now = DateTime.now();
+      // Có thể log hoặc hiển thị SnackBar nếu muốn
     }
   }
 
+
+  /// Đánh dấu tất cả thông báo đang hiển thị là đã đọc (trên client)
   void _markAllRead() {
     setState(() {
-      for (final n in _notifs) n.read = true;
+      for (final n in _notifs) {
+        n.read = true;
+      }
     });
+
+    // Đồng bộ badge: để FutureProvider tự gọi lại API getUnreadCount()
+    ref.invalidate(unreadNotificationCountProvider);
+
+    // (Tuỳ ý) nếu BE có API mark-all-read thì gọi thêm:
+    // final dio = ref.read(dioProvider);
+    // dio.post('/notifications/read-all');
   }
 
   void _openNotificationsSheet() {
@@ -267,7 +309,8 @@ class _HomePageState extends ConsumerState<HomePage> {
             IconButton(
               tooltip: 'Sổ quỹ',
               icon: const Icon(Icons.menu_book_outlined),
-              onPressed: () => Navigator.of(context).pushNamed('/reports/ledger'),
+              onPressed: () =>
+                  Navigator.of(context).pushNamed('/reports/ledger'),
             ),
             IconButton(
               tooltip: 'Làm mới',
@@ -320,7 +363,8 @@ class _HomePageState extends ConsumerState<HomePage> {
               if (err != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(err!, style: const TextStyle(color: Colors.red)),
+                  child:
+                  Text(err!, style: const TextStyle(color: Colors.red)),
                 ),
 
               _GreetingCardModern(
@@ -328,9 +372,11 @@ class _HomePageState extends ConsumerState<HomePage> {
                 email: s.email ?? (me?['email'] as String?) ?? '',
                 role: s.role ?? 'member',
                 onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const ProfilePage())),
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const ProfilePage(),
+                  ),
+                ),
               ),
               const SizedBox(height: 14),
 
@@ -342,12 +388,15 @@ class _HomePageState extends ConsumerState<HomePage> {
                   classId: s.classId!,
                   className: _className ?? 'Lớp đã tham gia',
                   balance: _balance,
-                  showFundShortcuts: isTreasurer, // Owner/Thủ quỹ mới có icon mini
+                  showFundShortcuts:
+                  isTreasurer, // Owner/Thủ quỹ mới có icon mini
                   fundMiniIcons: _kFundAccountMiniIcons,
                   onPickClass: () async {
                     final picked =
                     await Navigator.of(context).push<Map<String, dynamic>>(
-                      MaterialPageRoute(builder: (_) => const ClassListPage()),
+                      MaterialPageRoute(
+                        builder: (_) => const ClassListPage(),
+                      ),
                     );
                     if (picked != null) {
                       setState(() =>
@@ -355,10 +404,12 @@ class _HomePageState extends ConsumerState<HomePage> {
                       await _loadCurrentClassInfo();
                     }
                   },
-                  // luôn hiển thị nút thành viên (member xem được, không set role)
+                  // luôn hiển thị nút thành viên
                   onOpenMembers: () => Navigator.of(context).push(
                     MaterialPageRoute(
-                        builder: (_) => ClassMembersPage(classId: s.classId!)),
+                      builder: (_) =>
+                          ClassMembersPage(classId: s.classId!),
+                    ),
                   ),
                 ),
 
@@ -374,7 +425,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                     fallbackIcon: Icons.receipt_long,
                     title: 'Hóa đơn của tôi',
                     subtitle: 'Theo dõi & thanh toán',
-                    onTap: () => Navigator.of(context).pushNamed('/invoices'),
+                    onTap: () =>
+                        Navigator.of(context).pushNamed('/invoices'),
                   ),
                   if (isTreasurer)
                     _ActionSquareCard(
@@ -382,16 +434,16 @@ class _HomePageState extends ConsumerState<HomePage> {
                       fallbackIcon: Icons.verified,
                       title: 'Duyệt phiếu nộp',
                       subtitle: 'Xử lý chứng từ',
-                      onTap: () =>
-                          Navigator.of(context).pushNamed('/payments/review'),
+                      onTap: () => Navigator.of(context)
+                          .pushNamed('/payments/review'),
                     ),
                   _ActionSquareCard(
                     assetIcon: _kIcon.approved,
                     fallbackIcon: Icons.fact_check,
                     title: 'Hoá đơn đã duyệt',
                     subtitle: 'Danh sách đã thanh toán',
-                    onTap: () =>
-                        Navigator.of(context).pushNamed('/payments/approved'),
+                    onTap: () => Navigator.of(context)
+                        .pushNamed('/payments/approved'),
                   ),
                   if (isTreasurer)
                     _ActionSquareCard(
@@ -399,14 +451,16 @@ class _HomePageState extends ConsumerState<HomePage> {
                       fallbackIcon: Icons.fact_check,
                       title: 'Danh sách chưa nộp',
                       subtitle: 'Thành viên chưa nộp',
-                      onTap: () => Navigator.of(context).pushNamed('/reports/fee'),
+                      onTap: () =>
+                          Navigator.of(context).pushNamed('/reports/fee'),
                     ),
                   _ActionSquareCard(
                     assetIcon: _kIcon.expenses,
                     fallbackIcon: Icons.payments_outlined,
                     title: 'Khoản chi',
                     subtitle: 'Ghi & xem chi',
-                    onTap: () => Navigator.of(context).pushNamed('/expenses'),
+                    onTap: () =>
+                        Navigator.of(context).pushNamed('/expenses'),
                   ),
                   if (isTreasurer)
                     _ActionSquareCard(
@@ -414,8 +468,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                       fallbackIcon: Icons.upload_file,
                       title: 'Phát hóa đơn',
                       subtitle: 'Tạo kỳ thu nhanh',
-                      onTap: () =>
-                          Navigator.of(context).pushNamed('/fee-cycles/generate'),
+                      onTap: () => Navigator.of(context)
+                          .pushNamed('/fee-cycles/generate'),
                     ),
                 ],
               ),
@@ -479,9 +533,8 @@ class _NotificationsSheet extends StatelessWidget {
                     Divider(height: 1, color: cs.outlineVariant),
                 itemBuilder: (ctx, i) {
                   final n = items[i];
-                  final isIncome = n.type == 'income';
-                  final icon =
-                  isIncome ? Icons.trending_up : Icons.trending_down;
+                  final isIncome = n.type == 'income' || n.type == 'due_reminder';
+                  final icon = isIncome ? Icons.trending_up : Icons.trending_down;
                   final color = isIncome ? Colors.green : Colors.red;
                   return ListTile(
                     leading: CircleAvatar(
@@ -489,15 +542,21 @@ class _NotificationsSheet extends StatelessWidget {
                       child: Icon(icon, color: color),
                     ),
                     title: Text(n.title,
-                        maxLines: 2, overflow: TextOverflow.ellipsis),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis),
                     subtitle: Text(
-                      '${n.createdAt.hour.toString().padLeft(2, '0')}:${n.createdAt.minute.toString().padLeft(2, '0')} '
-                          '${n.createdAt.day.toString().padLeft(2, '0')}/${n.createdAt.month.toString().padLeft(2, '0')}',
+                      n.body.isNotEmpty
+                          ? n.body
+                          : '${n.createdAt.hour.toString().padLeft(2, '0')}:'
+                          '${n.createdAt.minute.toString().padLeft(2, '0')} '
+                          '${n.createdAt.day.toString().padLeft(2, '0')}/'
+                          '${n.createdAt.month.toString().padLeft(2, '0')}',
                       style: Theme.of(context)
                           .textTheme
                           .bodySmall
                           ?.copyWith(color: cs.outline),
                     ),
+
                     trailing: Text(
                       (isIncome ? '+ ' : '- ') + _fmtVn(n.amount),
                       style: TextStyle(
@@ -561,8 +620,10 @@ class _GlassCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: base,
             border: Border.all(
-              color:
-              Theme.of(context).colorScheme.outlineVariant.withOpacity(.25),
+              color: Theme.of(context)
+                  .colorScheme
+                  .outlineVariant
+                  .withOpacity(.25),
             ),
             borderRadius: BorderRadius.circular(borderRadius),
             boxShadow: [
@@ -608,7 +669,8 @@ class _GreetingCardModern extends StatelessWidget {
           children: [
             CircleAvatar(
               radius: 26,
-              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+              backgroundColor:
+              Theme.of(context).colorScheme.primaryContainer,
               child: Text(
                 (name.isNotEmpty ? name[0] : '?').toUpperCase(),
                 style: const TextStyle(fontWeight: FontWeight.w800),
@@ -627,7 +689,10 @@ class _GreetingCardModern extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     email,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(
                       color: Theme.of(context).colorScheme.outline,
                     ),
                   ),
@@ -641,8 +706,10 @@ class _GreetingCardModern extends StatelessWidget {
                 color: Theme.of(context).colorScheme.primaryContainer,
                 borderRadius: BorderRadius.circular(999),
               ),
-              child: Text(roleLabel,
-                  style: Theme.of(context).textTheme.labelMedium),
+              child: Text(
+                roleLabel,
+                style: Theme.of(context).textTheme.labelMedium,
+              ),
             ),
           ],
         ),
@@ -669,7 +736,10 @@ class _EmptyClassCardModern extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             'Nhấn “Tham gia bằng mã” để vào lớp.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(
               color: Theme.of(context).colorScheme.outline,
             ),
           ),
@@ -744,13 +814,20 @@ class _CurrentClassCardModern extends StatelessWidget {
                             ?.copyWith(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 2),
                     Text('Mã lớp: $classId',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.outline,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(
+                          color:
+                          Theme.of(context).colorScheme.outline,
                         )),
                   ],
                 ),
               ),
-              FilledButton.tonal(onPressed: onPickClass, child: const Text('Đổi lớp')),
+              FilledButton.tonal(
+                onPressed: onPickClass,
+                child: const Text('Đổi lớp'),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -966,8 +1043,14 @@ class _AssetIconBox extends StatelessWidget {
       width: size,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-          color: containerColor, borderRadius: BorderRadius.circular(radius)),
-      child: _SafeAssetIcon(asset: asset, size: size * .56, fallback: fallback),
+        color: containerColor,
+        borderRadius: BorderRadius.circular(radius),
+      ),
+      child: _SafeAssetIcon(
+        asset: asset,
+        size: size * .56,
+        fallback: fallback,
+      ),
     );
   }
 }
@@ -976,8 +1059,11 @@ class _SafeAssetIcon extends StatelessWidget {
   final String? asset;
   final IconData fallback;
   final double size;
-  const _SafeAssetIcon(
-      {required this.asset, required this.fallback, required this.size});
+  const _SafeAssetIcon({
+    required this.asset,
+    required this.fallback,
+    required this.size,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -988,8 +1074,6 @@ class _SafeAssetIcon extends StatelessWidget {
       height: size,
       fit: BoxFit.contain,
       errorBuilder: (_, __, ___) => Icon(fallback, size: size),
-      color: null,
-      colorBlendMode: BlendMode.srcIn,
     );
   }
 }

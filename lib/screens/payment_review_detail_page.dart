@@ -572,29 +572,49 @@ class _PaymentCommentsSectionState
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               // tên to hơn
+                              // ===== NAME =====
                               Text(
                                 userName.isEmpty ? 'Thành viên' : userName,
                                 style: theme.textTheme.bodyMedium?.copyWith(
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                body,
-                                style: theme.textTheme.bodyMedium,
+
+                              const SizedBox(height: 6),
+
+// ===== BODY (THỤT VÀO + BUBBLE) =====
+                              Padding(
+                                padding: const EdgeInsets.only(left: 16),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.surfaceContainerHighest,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    body,
+                                    style: theme.textTheme.bodyMedium,
+                                  ),
+                                ),
                               ),
-                              const SizedBox(height: 4),
+
+                              const SizedBox(height: 6),
+
+// ===== TIME + ACTION =====
                               Row(
                                 children: [
                                   if (createdAt.isNotEmpty)
                                     Text(
                                       createdAt,
-                                      style: theme.textTheme.bodySmall
-                                          ?.copyWith(
+                                      style: theme.textTheme.bodySmall?.copyWith(
                                         color: theme.colorScheme.outline,
                                       ),
                                     ),
                                   const Spacer(),
+
                                   if (commentId != null)
                                     InkWell(
                                       onTap: () {
@@ -610,19 +630,16 @@ class _PaymentCommentsSectionState
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           Icon(
-                                            liked
-                                                ? Icons.favorite
-                                                : Icons.favorite_border,
+                                            liked ? Icons.favorite : Icons.favorite_border,
                                             size: 16,
                                             color: liked
                                                 ? theme.colorScheme.primary
                                                 : theme.colorScheme.outline,
                                           ),
-                                          const SizedBox(width: 2),
+                                          const SizedBox(width: 4),
                                           Text(
                                             liked ? 'Đã thích' : 'Thích',
-                                            style: theme.textTheme.bodySmall
-                                                ?.copyWith(
+                                            style: theme.textTheme.bodySmall?.copyWith(
                                               color: liked
                                                   ? theme.colorScheme.primary
                                                   : theme.colorScheme.outline,
@@ -631,29 +648,28 @@ class _PaymentCommentsSectionState
                                         ],
                                       ),
                                     ),
-                                  const SizedBox(width: 8),
+
+                                  const SizedBox(width: 12),
+
                                   InkWell(
                                     onTap: () {
                                       setState(() {
                                         _replyToId = commentId;
-                                        _replyToName = userName.isEmpty
-                                            ? 'Thành viên'
-                                            : userName;
+                                        _replyToName =
+                                        userName.isEmpty ? 'Thành viên' : userName;
                                       });
+
                                       if (_textCtl.text.isEmpty &&
                                           _replyToName != null) {
                                         _textCtl.text = '@$_replyToName ';
-                                        _textCtl.selection =
-                                            TextSelection.fromPosition(
-                                              TextPosition(
-                                                  offset: _textCtl.text.length),
-                                            );
+                                        _textCtl.selection = TextSelection.fromPosition(
+                                          TextPosition(offset: _textCtl.text.length),
+                                        );
                                       }
                                     },
                                     child: Text(
                                       'Trả lời',
-                                      style: theme.textTheme.bodySmall
-                                          ?.copyWith(
+                                      style: theme.textTheme.bodySmall?.copyWith(
                                         color: theme.colorScheme.primary,
                                         fontWeight: FontWeight.w600,
                                       ),
